@@ -1,19 +1,28 @@
-# GenAI & Agentic AI Sprint
+GenAI & Agentic AI System Builder Sprint
+Overview
 
-This repository contains my 1-week deep dive into Generative AI and Agentic AI.
+This repository documents my structured deep dive into Generative AI and Agentic AI system development.
 
-## Tech Stack
-- OpenAI API
-- LangChain
-- ChromaDB
-- FastAPI
-- Sentence Transformers
+The goal of this project is not to build a simple chatbot, but to design and implement a production-style AI backend architecture including:
 
-## Setup
+Local LLM integration (Ollama + LLaMA3)
 
-1. Create virtual environment
-2. Install requirements
-3. Add OPENAI_API_KEY in .env
-4. Run main.py
+Prompt engineering fundamentals
 
-More updates coming daily.
+Retrieval-Augmented Generation (RAG)
+
+Vector search systems
+
+Tool-using AI agents
+
+Modular backend structure using FastAPI
+
+Enterprise-style AI architecture design
+
+Why This Project?
+
+This project exists to transition from:
+
+AI tool user → AI system builder
+
+It focuses on understanding how AI systems work internally, not just using APIs or prompting interfaces.
