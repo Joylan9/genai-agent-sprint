@@ -3,10 +3,7 @@ import numpy as np
 from ollama import chat
 import os
 import pickle
-
-# -------------------------------
-# Configuration
-# -------------------------------
+import hashlib
 
 DATA_PATH = "data/sample.txt"
 EMBEDDING_FILE = "data/vector_store.pkl"
@@ -15,9 +12,11 @@ print("Loading embedding model...")
 embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
 
-# -------------------------------
-# Indexing Phase (Only if needed)
-# -------------------------------
+def get_file_hash(path):
+    with open(path, "rb") as f:
+        file_content = f.read()
+    return hashlib.md5(file_content).hexdigest()
+
 
 def build_and_save_embeddings():
     print("Building embeddings...")
@@ -28,23 +27,29 @@ def build_and_save_embeddings():
     documents = [chunk.strip() for chunk in document_text.split("\n") if chunk.strip()]
     embeddings = embedding_model.encode(documents)
 
-    with open(EMBEDDING_FILE, "wb") as f:
-        pickle.dump((documents, embeddings), f)
+    file_hash = get_file_hash(DATA_PATH)
 
-    print("Embeddings saved to disk.")
+    with open(EMBEDDING_FILE, "wb") as f:
+        pickle.dump((documents, embeddings, file_hash), f)
+
+    print("Embeddings saved.")
     return documents, embeddings
 
 
 def load_embeddings():
     print("Loading embeddings from disk...")
     with open(EMBEDDING_FILE, "rb") as f:
-        documents, embeddings = pickle.load(f)
+        documents, embeddings, saved_hash = pickle.load(f)
+
+    current_hash = get_file_hash(DATA_PATH)
+
+    if current_hash != saved_hash:
+        print("Data changed. Rebuilding index...")
+        return build_and_save_embeddings()
+
+    print("Embeddings are up to date.")
     return documents, embeddings
 
-
-# -------------------------------
-# Startup Logic
-# -------------------------------
 
 if os.path.exists(EMBEDDING_FILE):
     documents, document_embeddings = load_embeddings()
@@ -53,10 +58,6 @@ else:
 
 print("System ready. Ask questions (type 'exit' to quit).\n")
 
-
-# -------------------------------
-# Retrieval Functions
-# -------------------------------
 
 def cosine_similarity(vec1, vec2):
     return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
@@ -96,10 +97,6 @@ Answer:
 
     return response["message"]["content"]
 
-
-# -------------------------------
-# Interactive Loop
-# -------------------------------
 
 while True:
     user_question = input("Ask a question: ")
