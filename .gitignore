@@ -6,3 +6,4 @@ __pycache__/
 *.pyd
 *.sqlite3
 *.log
+data/vector_store.pkl
