@@ -12,13 +12,19 @@ class AgentService:
                 "role": "system",
                 "content": """
 You are an intelligent agent.
-You can either:
-1. Respond with: Action: search
-   Action Input: <query>
-OR
-2. Respond with: Final Answer: <answer>
 
-Only use these formats.
+You must respond in ONE of these formats:
+
+1)
+Action: search
+Action Input: <query>
+
+OR
+
+2)
+Final Answer: <answer>
+
+Do not say anything else.
 """
             },
             {"role": "user", "content": goal}
@@ -34,23 +40,42 @@ Only use these formats.
             output = response["message"]["content"]
             print("\nAgent Output:\n", output)
 
+            # CASE 1: Final Answer
             if "Final Answer:" in output:
                 return output
 
+            # CASE 2: Tool Action
             if "Action:" in output:
+
+                # Safer parsing
                 lines = output.split("\n")
-                action = lines[0].split(":")[1].strip()
-                action_input = lines[1].split(":")[1].strip()
+
+                action = None
+                action_input = None
+
+                for line in lines:
+                    if line.startswith("Action:"):
+                        action = line.replace("Action:", "").strip()
+                    if line.startswith("Action Input:"):
+                        action_input = line.replace("Action Input:", "").strip()
+
+                if not action or not action_input:
+                    print("⚠️ Invalid agent format. Retrying...")
+                    continue
 
                 if action == "search" and self.tool:
                     observation = self.tool.search(action_input)
 
+                    # Add assistant action to history
                     messages.append(
                         {"role": "assistant", "content": output}
                     )
 
+                    # Feed tool result back
                     messages.append(
                         {"role": "user", "content": f"Observation: {observation}"}
                     )
 
-        return "Agent stopped without final answer."
+                    continue
+
+        return "Agent stopped without producing a final answer."
