@@ -89,8 +89,18 @@ Rules:
                     raise ValueError("Invalid 'steps' format.")
 
                 for step in plan["steps"]:
-                    if "tool" not in step or "query" not in step:
-                        raise ValueError("Each step must have 'tool' and 'query'.")
+                    # strict step validation
+                    if (
+                        not isinstance(step, dict)
+                        or "tool" not in step
+                        or "query" not in step
+                        or not isinstance(step["tool"], str)
+                        or not isinstance(step["query"], str)
+                    ):
+                        raise ValueError("Invalid step format.")
+
+                    if len(step["query"]) > 3000:
+                        raise ValueError("Step query too long.")
 
                     if self.registry and step["tool"] not in self.registry.list_tools():
                         raise ValueError(f"Unknown tool: {step['tool']}")
@@ -168,6 +178,10 @@ Fix this malformed JSON. Return ONLY valid JSON:
                 tool = self.registry.get(tool_name)
                 response = tool.execute(step)
 
+            # Validate tool response shape
+            if not isinstance(response, dict):
+                response = {"status": "error", "data": None, "metadata": {"error": "Invalid tool response format."}}
+
             # Ensure structured response
             response.setdefault("metadata", {})
             observations.append({
@@ -186,8 +200,7 @@ Fix this malformed JSON. Return ONLY valid JSON:
                     "metadata": response.get("metadata", {})
                 })
 
-            # Optional: if a step returns a fatal error, decide to stop early (policy decision).
-            # For now, we continue and include the error in final synthesis.
+            # Optional: stop early on critical failure (policy decision). Currently we continue.
 
         total_time = time.time() - start
 

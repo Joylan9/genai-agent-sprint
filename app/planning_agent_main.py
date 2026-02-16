@@ -7,6 +7,7 @@ and runs an interactive command-line session.
 import sys
 import traceback
 
+from infra.validators import InputValidator
 from registry.tool_registry import ToolRegistry
 from routing.intelligent_router import IntelligentRouter
 from services.planning_agent_service import PlanningAgentService
@@ -78,11 +79,17 @@ def main():
         registry = initialize_registry(logger)
 
         if not registry.list_tools():
+            logger.log("startup_no_tools", {"msg": "No tools registered; exiting"})
             print("❌ No tools registered.")
             return
 
         # router + planner
-        router = IntelligentRouter(registry=registry, reliable_executor=reliable_executor, logger=logger, similarity_threshold=0.50)
+        router = IntelligentRouter(
+            registry=registry,
+            reliable_executor=reliable_executor,
+            logger=logger,
+            similarity_threshold=0.50
+        )
 
         agent = PlanningAgentService(
             tool_registry=registry,
@@ -92,12 +99,19 @@ def main():
 
         print("✅ System ready.\n")
 
-        goal = input("Enter complex goal: ").strip()
+        # --------------------------
+        # CLI input with validation
+        # --------------------------
+        raw_goal = input("Enter complex goal: ")
 
-        if not goal:
-            print("❌ Goal cannot be empty.")
+        try:
+            goal = InputValidator.validate_goal(raw_goal)
+        except ValueError as e:
+            logger.log("invalid_input", {"error": str(e)})
+            print(f"❌ Invalid input: {e}")
             return
 
+        # Generate & run plan
         print("\n--- Generating Plan ---")
         plan = agent.create_plan(goal)
         print(plan)
@@ -109,6 +123,9 @@ def main():
         print(result)
 
     except Exception:
+        logger = locals().get("logger", None)
+        if logger:
+            logger.log("fatal_error", {"error": traceback.format_exc()})
         print("❌ Unexpected system error occurred.")
         traceback.print_exc()
         sys.exit(1)
