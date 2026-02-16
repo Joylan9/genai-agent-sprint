@@ -1,68 +1,66 @@
 from ollama import chat
 import json
 import re
-import time
 
 
 class PlanningAgentService:
-    def __init__(self, model_name="llama3", tool=None, max_json_retries=2):
+    def __init__(
+        self,
+        model_name="llama3",
+        tool_registry=None,
+        router=None,
+        max_json_retries=2
+    ):
         self.model_name = model_name
-        self.tool = tool
+        self.registry = tool_registry
+        self.router = router
         self.max_json_retries = max_json_retries
 
     # ============================================================
     # STEP 1: JSON-STRUCTURED PLAN CREATION
     # ============================================================
     def create_plan(self, goal):
+
+        available_tools = ", ".join(self.registry.list_tools())
+
         messages = [
             {
                 "role": "system",
-                "content": """
+                "content": f"""
 You are a planning agent.
 
-You ONLY have access to:
-- search
+You ONLY have access to these tools:
+{available_tools}
 
-Return a valid JSON object with this exact structure:
+Return a valid JSON object with this structure:
 
-{
+{{
   "steps": [
-    {"tool": "search", "query": "<query1>"},
-    {"tool": "search", "query": "<query2>"}
+    {{"tool": "<tool_name>", "query": "<query1>"}}
   ]
-}
+}}
 
 Rules:
+- Use only listed tool names.
 - Return ONLY valid JSON.
-- No explanations.
 - No markdown.
-- No extra text.
+- No explanations.
 """
             },
             {"role": "user", "content": goal}
         ]
 
-        response = chat(
-            model=self.model_name,
-            messages=messages
-        )
-
+        response = chat(model=self.model_name, messages=messages)
         return response["message"]["content"]
 
     # ============================================================
-    # STEP 2: ENTERPRISE JSON PARSING + REPAIR
+    # STEP 2: STRICT JSON PARSING
     # ============================================================
     def parse_plan_json(self, plan_text):
-        """
-        Extract and validate JSON plan.
-        Attempts repair if malformed.
-        """
 
         def extract_json(text):
             match = re.search(r"\{.*\}", text, re.DOTALL)
-            if match:
-                return match.group(0)
-            return None
+            return match.group(0) if match else None
 
         attempt = 0
         current_text = plan_text
@@ -71,35 +69,28 @@ Rules:
             try:
                 extracted = extract_json(current_text)
                 if not extracted:
-                    raise ValueError("No JSON object found.")
+                    raise ValueError("No JSON found.")
 
                 plan = json.loads(extracted)
 
-                if "steps" not in plan:
-                    raise ValueError("Missing 'steps' key.")
-
-                if not isinstance(plan["steps"], list):
-                    raise ValueError("'steps' must be a list.")
+                if "steps" not in plan or not isinstance(plan["steps"], list):
+                    raise ValueError("Invalid 'steps' format.")
 
                 for step in plan["steps"]:
-                    if not isinstance(step, dict):
-                        raise ValueError("Each step must be an object.")
                     if "tool" not in step or "query" not in step:
-                        raise ValueError("Each step must contain 'tool' and 'query'.")
-                    if step["tool"] != "search":
-                        raise ValueError(f"Unsupported tool: {step['tool']}")
+                        raise ValueError("Each step must have 'tool' and 'query'.")
+
+                    if step["tool"] not in self.registry.list_tools():
+                        raise ValueError(f"Unknown tool: {step['tool']}")
 
                 return plan["steps"]
 
             except Exception as e:
                 if attempt >= self.max_json_retries:
-                    raise ValueError(f"Plan parsing failed after retries: {e}")
+                    raise ValueError(f"Plan parsing failed: {e}")
 
-                # Attempt JSON repair
                 repair_prompt = f"""
-The following text was supposed to be valid JSON but is malformed.
-
-Fix it and return ONLY valid JSON:
+Fix this malformed JSON. Return ONLY valid JSON:
 
 {current_text}
 """
@@ -107,7 +98,7 @@ Fix it and return ONLY valid JSON:
                 repair_response = chat(
                     model=self.model_name,
                     messages=[
-                        {"role": "system", "content": "You are a JSON repair assistant."},
+                        {"role": "system", "content": "You fix JSON."},
                         {"role": "user", "content": repair_prompt}
                     ]
                 )
@@ -115,10 +106,10 @@ Fix it and return ONLY valid JSON:
                 current_text = repair_response["message"]["content"]
                 attempt += 1
 
-        raise ValueError("Unknown JSON parsing failure.")
+        raise ValueError("JSON parsing failure.")
 
     # ============================================================
-    # STEP 3: DETERMINISTIC EXECUTION
+    # STEP 3: ROUTER-BASED EXECUTION
     # ============================================================
     def execute_plan(self, goal, plan_text):
 
@@ -127,36 +118,28 @@ Fix it and return ONLY valid JSON:
         except ValueError as e:
             return f"❌ Plan parsing failed: {e}"
 
-        if not self.tool:
-            return "❌ No tool available."
+        if not self.registry:
+            return "❌ Tool registry not configured."
 
         observations = []
 
         print("\n--- Executing Structured Plan ---")
 
         for index, step in enumerate(steps):
-            query = step["query"]
 
-            print(f"\nExecuting Step {index + 1}: search -> {query}")
+            print(f"\nStep {index + 1}: {step['tool']} -> {step['query']}")
 
-            start_time = time.time()
-
-            try:
-                result = self.tool.search(query)
-            except Exception as e:
-                result = f"Tool execution failed: {e}"
-
-            duration = time.time() - start_time
-
-            preview = result[:300] if isinstance(result, str) else str(result)
-            print("Observation preview:", preview, "...")
-            print(f"Tool latency: {duration:.2f}s")
+            if self.router:
+                response = self.router.execute(step)
+            else:
+                tool = self.registry.get(step["tool"])
+                response = tool.execute(step)
 
             observations.append({
                 "step": index + 1,
-                "query": query,
-                "result": result,
-                "latency": duration
+                "tool": step["tool"],
+                "query": step["query"],
+                "response": response
             })
 
         return self.synthesize_answer(goal, observations)
@@ -169,9 +152,11 @@ Fix it and return ONLY valid JSON:
         observation_text = ""
 
         for obs in observations:
+            data = obs["response"].get("data", "")
+
             observation_text += (
-                f"\nStep {obs['step']} ({obs['query']}):\n"
-                f"{obs['result']}\n"
+                f"\nStep {obs['step']} ({obs['tool']} - {obs['query']}):\n"
+                f"{data}\n"
             )
 
         messages = [
@@ -181,7 +166,7 @@ Fix it and return ONLY valid JSON:
 You are a summarization agent.
 
 Using ONLY the provided observations,
-produce a complete final answer to the goal.
+produce a complete final answer.
 Do not invent information.
 """
             },
@@ -191,9 +176,5 @@ Do not invent information.
             }
         ]
 
-        response = chat(
-            model=self.model_name,
-            messages=messages
-        )
-
+        response = chat(model=self.model_name, messages=messages)
         return response["message"]["content"]
