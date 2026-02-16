@@ -1,15 +1,18 @@
 from ollama import chat
 import json
+import re
+import time
 
 
 class PlanningAgentService:
-    def __init__(self, model_name="llama3", tool=None):
+    def __init__(self, model_name="llama3", tool=None, max_json_retries=2):
         self.model_name = model_name
         self.tool = tool
+        self.max_json_retries = max_json_retries
 
-    # ---------------------------------------
+    # ============================================================
     # STEP 1: JSON-STRUCTURED PLAN CREATION
-    # ---------------------------------------
+    # ============================================================
     def create_plan(self, goal):
         messages = [
             {
@@ -46,41 +49,86 @@ Rules:
 
         return response["message"]["content"]
 
-    # ---------------------------------------
-    # STEP 2: STRICT JSON VALIDATION
-    # ---------------------------------------
+    # ============================================================
+    # STEP 2: ENTERPRISE JSON PARSING + REPAIR
+    # ============================================================
     def parse_plan_json(self, plan_text):
-        try:
-            plan = json.loads(plan_text)
+        """
+        Extract and validate JSON plan.
+        Attempts repair if malformed.
+        """
 
-            if "steps" not in plan:
-                raise ValueError("Missing 'steps' key")
+        def extract_json(text):
+            match = re.search(r"\{.*\}", text, re.DOTALL)
+            if match:
+                return match.group(0)
+            return None
 
-            if not isinstance(plan["steps"], list):
-                raise ValueError("'steps' must be a list")
+        attempt = 0
+        current_text = plan_text
 
-            for step in plan["steps"]:
-                if "tool" not in step or "query" not in step:
-                    raise ValueError("Each step must contain 'tool' and 'query'")
-                if step["tool"] != "search":
-                    raise ValueError(f"Unsupported tool: {step['tool']}")
+        while attempt <= self.max_json_retries:
+            try:
+                extracted = extract_json(current_text)
+                if not extracted:
+                    raise ValueError("No JSON object found.")
 
-            return plan["steps"]
+                plan = json.loads(extracted)
 
-        except Exception as e:
-            raise ValueError(f"Invalid plan JSON: {e}")
+                if "steps" not in plan:
+                    raise ValueError("Missing 'steps' key.")
 
-    # ---------------------------------------
+                if not isinstance(plan["steps"], list):
+                    raise ValueError("'steps' must be a list.")
+
+                for step in plan["steps"]:
+                    if not isinstance(step, dict):
+                        raise ValueError("Each step must be an object.")
+                    if "tool" not in step or "query" not in step:
+                        raise ValueError("Each step must contain 'tool' and 'query'.")
+                    if step["tool"] != "search":
+                        raise ValueError(f"Unsupported tool: {step['tool']}")
+
+                return plan["steps"]
+
+            except Exception as e:
+                if attempt >= self.max_json_retries:
+                    raise ValueError(f"Plan parsing failed after retries: {e}")
+
+                # Attempt JSON repair
+                repair_prompt = f"""
+The following text was supposed to be valid JSON but is malformed.
+
+Fix it and return ONLY valid JSON:
+
+{current_text}
+"""
+
+                repair_response = chat(
+                    model=self.model_name,
+                    messages=[
+                        {"role": "system", "content": "You are a JSON repair assistant."},
+                        {"role": "user", "content": repair_prompt}
+                    ]
+                )
+
+                current_text = repair_response["message"]["content"]
+                attempt += 1
+
+        raise ValueError("Unknown JSON parsing failure.")
+
+    # ============================================================
     # STEP 3: DETERMINISTIC EXECUTION
-    # ---------------------------------------
+    # ============================================================
     def execute_plan(self, goal, plan_text):
+
         try:
             steps = self.parse_plan_json(plan_text)
         except ValueError as e:
-            return f"Plan parsing failed: {e}"
+            return f"❌ Plan parsing failed: {e}"
 
         if not self.tool:
-            return "No tool available."
+            return "❌ No tool available."
 
         observations = []
 
@@ -91,25 +139,33 @@ Rules:
 
             print(f"\nExecuting Step {index + 1}: search -> {query}")
 
+            start_time = time.time()
+
             try:
                 result = self.tool.search(query)
             except Exception as e:
                 result = f"Tool execution failed: {e}"
 
-            print("Observation preview:", result[:300], "...")
+            duration = time.time() - start_time
+
+            preview = result[:300] if isinstance(result, str) else str(result)
+            print("Observation preview:", preview, "...")
+            print(f"Tool latency: {duration:.2f}s")
 
             observations.append({
                 "step": index + 1,
                 "query": query,
-                "result": result
+                "result": result,
+                "latency": duration
             })
 
         return self.synthesize_answer(goal, observations)
 
-    # ---------------------------------------
+    # ============================================================
     # STEP 4: FINAL SYNTHESIS
-    # ---------------------------------------
+    # ============================================================
     def synthesize_answer(self, goal, observations):
+
         observation_text = ""
 
         for obs in observations:
@@ -126,6 +182,7 @@ You are a summarization agent.
 
 Using ONLY the provided observations,
 produce a complete final answer to the goal.
+Do not invent information.
 """
             },
             {
