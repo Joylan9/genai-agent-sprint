@@ -3,7 +3,7 @@ import traceback
 
 from services.planning_agent_service import PlanningAgentService
 
-# Try to import both tools
+# Optional tool imports
 try:
     from services.web_search_tool import WebSearchTool
 except Exception:
@@ -44,7 +44,7 @@ def choose_tool_and_init():
         except Exception as e:
             print("⚠️ Failed to initialize RAG tool:", e)
 
-    # Initialize Web
+    # Initialize Web Search
     if WebSearchTool is not None:
         try:
             web_tool = WebSearchTool()
@@ -61,17 +61,21 @@ def choose_tool_and_init():
 
 
 # ============================================================
-# HYBRID TOOL WRAPPER (ENTERPRISE VERSION)
+# HYBRID SEARCH WRAPPER (ENTERPRISE VERSION)
 # ============================================================
 
 class HybridToolWrapper:
     """
-    Hybrid search:
-    - Uses RAG + similarity gating
-    - Falls back to Web if RAG confidence is low
+    Enterprise Hybrid Search Routing
+
+    Strategy:
+      1. Query RAG with top_k results.
+      2. Compute max similarity score.
+      3. If score >= threshold → use RAG.
+      4. Otherwise → fallback to Web search.
     """
 
-    def __init__(self, toolset, similarity_threshold=0.45, top_k=1):
+    def __init__(self, toolset, similarity_threshold=0.50, top_k=3):
         self.toolset = toolset
         self.similarity_threshold = similarity_threshold
         self.top_k = top_k
@@ -80,34 +84,34 @@ class HybridToolWrapper:
         rag_tool = self.toolset.get("rag_tool")
         web_tool = self.toolset.get("web_tool")
 
-        # 1️⃣ Try RAG first (with similarity score)
+        # ------------------------------
+        # 1️⃣ Try RAG First
+        # ------------------------------
         if rag_tool:
             try:
                 docs, scores = rag_tool.search_with_score(query, top_k=self.top_k)
 
-                # Normalize if single result
-                if isinstance(docs, str):
-                    docs = [docs]
-                    scores = [scores]
-
                 max_score = max(scores)
-
-                print(f"[RAG similarity score: {max_score:.3f}]")
+                print(f"[RAG similarity score: {max_score:.4f}]")
 
                 if max_score >= self.similarity_threshold:
                     print("→ Using RAG (high confidence)")
-                    joined = "\n\n".join(
-                        [f"[score={s:.4f}]\n{d}" for d, s in zip(docs, scores)]
-                    )
-                    return f"[source=rag | score={max_score:.3f}]\n{joined}"
 
-                else:
-                    print("→ RAG confidence low. Falling back to web.")
+                    combined = "\n\n".join(
+                        f"[score={s:.4f}]\n{d}"
+                        for d, s in zip(docs, scores)
+                    )
+
+                    return f"[source=rag | confidence={max_score:.4f}]\n{combined}"
+
+                print("→ RAG confidence LOW → fallback to Web.")
 
             except Exception as e:
-                print("⚠️ RAG search failed:", e)
+                print("⚠️ RAG failure:", e)
 
-        # 2️⃣ Fallback to Web search
+        # ------------------------------
+        # 2️⃣ Fallback to Web
+        # ------------------------------
         if web_tool:
             try:
                 web_result = web_tool.search(query)
@@ -119,7 +123,7 @@ class HybridToolWrapper:
 
 
 # ============================================================
-# MAIN
+# MAIN ENTRY
 # ============================================================
 
 def main():
