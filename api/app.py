@@ -1,9 +1,19 @@
+"""
+api/app.py
+FastAPI entrypoint for the Enterprise AI Agent Engine.
+"""
+
 from fastapi import FastAPI, HTTPException
 from api.schemas import AgentRequest, AgentResponse
 from api.dependencies import build_agent
 
-app = FastAPI(title="Enterprise AI Agent Engine")
+app = FastAPI(
+    title="Enterprise AI Agent Engine",
+    version="1.0.0",
+    description="Production-ready AI agent with routing, reliability, and hybrid search."
+)
 
+# Build agent once at startup
 agent = build_agent()
 
 
