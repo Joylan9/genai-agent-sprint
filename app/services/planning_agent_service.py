@@ -1,4 +1,5 @@
 from ollama import chat
+import re
 
 
 class PlanningAgentService:
@@ -6,14 +7,24 @@ class PlanningAgentService:
         self.model_name = model_name
         self.tool = tool
 
+    # ----------------------------
+    # STEP 1: TOOL-AWARE PLANNING
+    # ----------------------------
     def create_plan(self, goal):
         messages = [
             {
                 "role": "system",
                 "content": """
 You are a planning agent.
-Break the user goal into clear numbered steps.
-Only return the plan.
+
+You ONLY have access to this tool:
+- search
+
+Create a short numbered plan.
+Each step MUST require using the search tool.
+Keep it practical and executable.
+
+Return only numbered steps.
 """
             },
             {"role": "user", "content": goal}
@@ -26,69 +37,73 @@ Only return the plan.
 
         return response["message"]["content"]
 
-    def execute_plan(self, goal, plan, max_iterations=5):
+    # ----------------------------
+    # STEP 2: PARSE PLAN INTO STEPS
+    # ----------------------------
+    def parse_plan(self, plan_text):
+        steps = re.findall(r"\d+\.\s*(.*)", plan_text)
+        return steps
+
+    # ----------------------------
+    # STEP 3: ENTERPRISE EXECUTION
+    # ----------------------------
+    def execute_plan(self, goal, plan):
+
+        steps = self.parse_plan(plan)
+
+        if not steps:
+            return "Invalid plan structure."
+
+        observations = []
+
+        print("\n--- Executing Plan Deterministically ---")
+
+        for index, step in enumerate(steps):
+            print(f"\nExecuting Step {index + 1}: {step}")
+
+            # Extract search query from step
+            query = step.lower().replace("search for", "").strip()
+
+            if not self.tool:
+                return "No tool available."
+
+            result = self.tool.search(query)
+
+            print("Observation:", result)
+
+            observations.append(f"Step {index + 1}: {result}")
+
+        # ----------------------------
+        # STEP 4: FINAL SYNTHESIS
+        # ----------------------------
+        return self.synthesize_answer(goal, observations)
+
+    # ----------------------------
+    # STEP 5: FINAL ANSWER GENERATION
+    # ----------------------------
+    def synthesize_answer(self, goal, observations):
+
+        combined_observations = "\n".join(observations)
 
         messages = [
             {
                 "role": "system",
                 "content": """
-You are an execution agent.
+You are a summarization agent.
 
-Follow the given plan step by step.
-
-You may respond with:
-
-Action: search
-Action Input: <query>
-
-OR
-
-Final Answer: <answer>
-
-Only use these formats.
+Based only on the provided observations,
+produce a complete final answer to the goal.
 """
             },
-            {"role": "user", "content": f"Goal:\n{goal}\n\nPlan:\n{plan}"}
+            {
+                "role": "user",
+                "content": f"Goal:\n{goal}\n\nObservations:\n{combined_observations}"
+            }
         ]
 
-        for _ in range(max_iterations):
+        response = chat(
+            model=self.model_name,
+            messages=messages
+        )
 
-            response = chat(
-                model=self.model_name,
-                messages=messages
-            )
-
-            output = response["message"]["content"]
-            print("\nExecution Output:\n", output)
-
-            if "Final Answer:" in output:
-                return output
-
-            if "Action:" in output:
-                lines = output.split("\n")
-
-                action = None
-                action_input = None
-
-                for line in lines:
-                    if line.startswith("Action:"):
-                        action = line.replace("Action:", "").strip()
-                    if line.startswith("Action Input:"):
-                        action_input = line.replace("Action Input:", "").strip()
-
-                if not action or not action_input:
-                    print("⚠️ Invalid format. Retrying...")
-                    continue
-
-                if action == "search" and self.tool:
-                    observation = self.tool.search(action_input)
-
-                    messages.append(
-                        {"role": "assistant", "content": output}
-                    )
-
-                    messages.append(
-                        {"role": "user", "content": f"Observation: {observation}"}
-                    )
-
-        return "Agent stopped without final answer."
+        return response["message"]["content"]
