@@ -1,5 +1,5 @@
 from ollama import chat
-import re
+import json
 
 
 class PlanningAgentService:
@@ -7,9 +7,9 @@ class PlanningAgentService:
         self.model_name = model_name
         self.tool = tool
 
-    # ----------------------------
-    # STEP 1: TOOL-AWARE PLANNING
-    # ----------------------------
+    # ---------------------------------------
+    # STEP 1: JSON-STRUCTURED PLAN CREATION
+    # ---------------------------------------
     def create_plan(self, goal):
         messages = [
             {
@@ -17,14 +17,23 @@ class PlanningAgentService:
                 "content": """
 You are a planning agent.
 
-You ONLY have access to this tool:
+You ONLY have access to:
 - search
 
-Create a short numbered plan.
-Each step MUST require using the search tool.
-Keep it practical and executable.
+Return a valid JSON object with this exact structure:
 
-Return only numbered steps.
+{
+  "steps": [
+    {"tool": "search", "query": "<query1>"},
+    {"tool": "search", "query": "<query2>"}
+  ]
+}
+
+Rules:
+- Return ONLY valid JSON.
+- No explanations.
+- No markdown.
+- No extra text.
 """
             },
             {"role": "user", "content": goal}
@@ -37,53 +46,77 @@ Return only numbered steps.
 
         return response["message"]["content"]
 
-    # ----------------------------
-    # STEP 2: PARSE PLAN INTO STEPS
-    # ----------------------------
-    def parse_plan(self, plan_text):
-        steps = re.findall(r"\d+\.\s*(.*)", plan_text)
-        return steps
+    # ---------------------------------------
+    # STEP 2: STRICT JSON VALIDATION
+    # ---------------------------------------
+    def parse_plan_json(self, plan_text):
+        try:
+            plan = json.loads(plan_text)
 
-    # ----------------------------
-    # STEP 3: ENTERPRISE EXECUTION
-    # ----------------------------
-    def execute_plan(self, goal, plan):
+            if "steps" not in plan:
+                raise ValueError("Missing 'steps' key")
 
-        steps = self.parse_plan(plan)
+            if not isinstance(plan["steps"], list):
+                raise ValueError("'steps' must be a list")
 
-        if not steps:
-            return "Invalid plan structure."
+            for step in plan["steps"]:
+                if "tool" not in step or "query" not in step:
+                    raise ValueError("Each step must contain 'tool' and 'query'")
+                if step["tool"] != "search":
+                    raise ValueError(f"Unsupported tool: {step['tool']}")
+
+            return plan["steps"]
+
+        except Exception as e:
+            raise ValueError(f"Invalid plan JSON: {e}")
+
+    # ---------------------------------------
+    # STEP 3: DETERMINISTIC EXECUTION
+    # ---------------------------------------
+    def execute_plan(self, goal, plan_text):
+        try:
+            steps = self.parse_plan_json(plan_text)
+        except ValueError as e:
+            return f"Plan parsing failed: {e}"
+
+        if not self.tool:
+            return "No tool available."
 
         observations = []
 
-        print("\n--- Executing Plan Deterministically ---")
+        print("\n--- Executing Structured Plan ---")
 
         for index, step in enumerate(steps):
-            print(f"\nExecuting Step {index + 1}: {step}")
+            query = step["query"]
 
-            # Extract search query from step
-            query = step.lower().replace("search for", "").strip()
+            print(f"\nExecuting Step {index + 1}: search -> {query}")
 
-            if not self.tool:
-                return "No tool available."
+            try:
+                result = self.tool.search(query)
+            except Exception as e:
+                result = f"Tool execution failed: {e}"
 
-            result = self.tool.search(query)
+            print("Observation preview:", result[:300], "...")
 
-            print("Observation:", result)
+            observations.append({
+                "step": index + 1,
+                "query": query,
+                "result": result
+            })
 
-            observations.append(f"Step {index + 1}: {result}")
-
-        # ----------------------------
-        # STEP 4: FINAL SYNTHESIS
-        # ----------------------------
         return self.synthesize_answer(goal, observations)
 
-    # ----------------------------
-    # STEP 5: FINAL ANSWER GENERATION
-    # ----------------------------
+    # ---------------------------------------
+    # STEP 4: FINAL SYNTHESIS
+    # ---------------------------------------
     def synthesize_answer(self, goal, observations):
+        observation_text = ""
 
-        combined_observations = "\n".join(observations)
+        for obs in observations:
+            observation_text += (
+                f"\nStep {obs['step']} ({obs['query']}):\n"
+                f"{obs['result']}\n"
+            )
 
         messages = [
             {
@@ -91,13 +124,13 @@ Return only numbered steps.
                 "content": """
 You are a summarization agent.
 
-Based only on the provided observations,
+Using ONLY the provided observations,
 produce a complete final answer to the goal.
 """
             },
             {
                 "role": "user",
-                "content": f"Goal:\n{goal}\n\nObservations:\n{combined_observations}"
+                "content": f"Goal:\n{goal}\n\nObservations:\n{observation_text}"
             }
         ]
 
