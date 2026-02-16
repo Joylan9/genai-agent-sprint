@@ -1,29 +1,68 @@
 class IntelligentRouter:
-    def __init__(self, registry, similarity_threshold=0.50):
+    """
+    Enterprise execution router.
+
+    Responsibilities:
+    - Execute requested tool via ReliableExecutor
+    - Inspect metadata (confidence, similarity, errors)
+    - Apply intelligent fallback rules
+    - Preserve structured execution metadata
+    """
+
+    def __init__(self, registry, reliable_executor, similarity_threshold=0.50):
         self.registry = registry
+        self.reliable_executor = reliable_executor
         self.similarity_threshold = similarity_threshold
 
     def execute(self, step):
-        """
-        Execute tool with confidence-aware routing.
-        """
 
         requested_tool_name = step["tool"]
-        query = step["query"]
 
+        # ------------------------------
+        # Execute Primary Tool
+        # ------------------------------
         tool = self.registry.get(requested_tool_name)
+        response = self.reliable_executor.execute(tool, step)
 
-        response = tool.execute(step)
+        response.setdefault("metadata", {})
+        response["metadata"]["requested_tool"] = requested_tool_name
 
-        # If RAG tool and similarity low → fallback
+        # ------------------------------
+        # If primary tool failed → optional fallback
+        # ------------------------------
+        if response.get("status") == "error":
+            if requested_tool_name != "web_search" and "web_search" in self.registry.list_tools():
+                fallback_tool = self.registry.get("web_search")
+
+                fallback_response = self.reliable_executor.execute(fallback_tool, step)
+                fallback_response.setdefault("metadata", {})
+                fallback_response["metadata"]["fallback_from"] = requested_tool_name
+
+                return fallback_response
+
+            return response
+
+        # ------------------------------
+        # RAG Confidence-Based Fallback
+        # ------------------------------
         if requested_tool_name == "rag_search":
+
             similarity = response.get("metadata", {}).get("similarity")
 
             if similarity is not None and similarity < self.similarity_threshold:
-                print(f"[Router] Low RAG similarity ({similarity:.4f}) → Fallback to web_search")
+
+                print(
+                    f"[Router] RAG similarity {similarity:.4f} "
+                    f"below threshold {self.similarity_threshold} → fallback to web"
+                )
 
                 if "web_search" in self.registry.list_tools():
-                    web_tool = self.registry.get("web_search")
-                    return web_tool.execute(step)
+                    fallback_tool = self.registry.get("web_search")
+
+                    fallback_response = self.reliable_executor.execute(fallback_tool, step)
+                    fallback_response.setdefault("metadata", {})
+                    fallback_response["metadata"]["fallback_from"] = "rag_search"
+
+                    return fallback_response
 
         return response
