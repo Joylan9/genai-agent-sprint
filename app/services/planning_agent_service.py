@@ -1,7 +1,6 @@
 """
-services/planning_agent_service.py
-Planner service: creates JSON-structured plans via LLM, validates/repairs JSON,
-delegates step execution to the router, and synthesizes a final answer.
+app/services/planning_agent_service.py
+Enterprise planning agent service.
 """
 
 from typing import Optional, List, Dict, Any
@@ -10,9 +9,9 @@ import json
 import re
 import time
 
-from infra.logger import StructuredLogger, generate_request_id
-from registry.tool_registry import ToolRegistry
-from routing.intelligent_router import IntelligentRouter
+from ..infra.logger import StructuredLogger, generate_request_id
+from ..registry.tool_registry import ToolRegistry
+from ..routing.intelligent_router import IntelligentRouter
 
 
 class PlanningAgentService:
@@ -22,7 +21,7 @@ class PlanningAgentService:
         tool_registry: Optional[ToolRegistry] = None,
         router: Optional[IntelligentRouter] = None,
         logger: Optional[StructuredLogger] = None,
-        max_json_retries: int = 2
+        max_json_retries: int = 2,
     ):
         self.model_name = model_name
         self.registry = tool_registry
@@ -31,10 +30,12 @@ class PlanningAgentService:
         self.max_json_retries = max_json_retries
 
     # ============================================================
-    # STEP 1: JSON-STRUCTURED PLAN CREATION
+    # PLAN CREATION
     # ============================================================
     def create_plan(self, goal: str) -> str:
-        available_tools = ", ".join(self.registry.list_tools() if self.registry else [])
+        available_tools = ", ".join(
+            self.registry.list_tools() if self.registry else []
+        )
 
         messages = [
             {
@@ -42,35 +43,34 @@ class PlanningAgentService:
                 "content": f"""
 You are a planning agent.
 
-You ONLY have access to these tools:
+You ONLY have access to:
 {available_tools}
 
-Return a valid JSON object with this structure:
+Return ONLY valid JSON:
 
 {{
   "steps": [
-    {{"tool": "<tool_name>", "query": "<query1>"}}
+    {{"tool": "<tool_name>", "query": "<query>"}}
   ]
 }}
 
 Rules:
-- Use only listed tool names.
-- Return ONLY valid JSON.
-- No markdown.
-- No explanations.
+- Use only listed tool names
+- No markdown
+- No explanations
 """
             },
-            {"role": "user", "content": goal}
+            {"role": "user", "content": goal},
         ]
 
         response = chat(model=self.model_name, messages=messages)
         return response["message"]["content"]
 
     # ============================================================
-    # STEP 2: STRICT JSON PARSING
+    # JSON PARSING
     # ============================================================
     def parse_plan_json(self, plan_text: str) -> List[Dict[str, Any]]:
-        def extract_json(text: str) -> Optional[str]:
+        def extract_json(text: str):
             match = re.search(r"\{.*\}", text, re.DOTALL)
             return match.group(0) if match else None
 
@@ -89,7 +89,6 @@ Rules:
                     raise ValueError("Invalid 'steps' format.")
 
                 for step in plan["steps"]:
-                    # strict step validation
                     if (
                         not isinstance(step, dict)
                         or "tool" not in step
@@ -108,151 +107,129 @@ Rules:
                 return plan["steps"]
 
             except Exception as e:
-                # Log parse attempt failure
                 if self.logger:
-                    self.logger.log("plan_parse_attempt_failed", {
-                        "error": str(e),
-                        "attempt": attempt,
-                        "current_text_preview": (current_text[:500] + "...") if len(current_text) > 500 else current_text
-                    })
+                    self.logger.log(
+                        "plan_parse_attempt_failed",
+                        {"error": str(e), "attempt": attempt},
+                    )
 
                 if attempt >= self.max_json_retries:
                     raise ValueError(f"Plan parsing failed: {e}")
 
-                # Ask LLM to repair JSON
                 repair_prompt = f"""
 Fix this malformed JSON. Return ONLY valid JSON:
 
 {current_text}
 """
+
                 repair_response = chat(
                     model=self.model_name,
                     messages=[
-                        {"role": "system", "content": "You are a JSON repair assistant. Fix the JSON and return only the JSON."},
-                        {"role": "user", "content": repair_prompt}
-                    ]
+                        {"role": "system", "content": "Fix JSON only."},
+                        {"role": "user", "content": repair_prompt},
+                    ],
                 )
+
                 current_text = repair_response["message"]["content"]
                 attempt += 1
 
         raise ValueError("JSON parsing failure.")
 
     # ============================================================
-    # STEP 3: ROUTER-BASED EXECUTION
+    # EXECUTION
     # ============================================================
     def execute_plan(self, goal: str, plan_text: str) -> str:
         request_id = generate_request_id()
         start = time.time()
 
         if self.logger:
-            self.logger.log("request_started", {"request_id": request_id, "goal_preview": (goal[:300] + "...") if len(goal) > 300 else goal})
+            self.logger.log(
+                "request_started",
+                {"request_id": request_id, "goal_preview": goal[:300]},
+            )
 
         try:
             steps = self.parse_plan_json(plan_text)
         except ValueError as e:
             if self.logger:
-                self.logger.log("request_failed_plan_parse", {"request_id": request_id, "error": str(e)})
+                self.logger.log(
+                    "request_failed_plan_parse",
+                    {"request_id": request_id, "error": str(e)},
+                )
             return f"❌ Plan parsing failed: {e}"
 
         if not self.registry:
-            if self.logger:
-                self.logger.log("request_failed_no_registry", {"request_id": request_id})
-            return "❌ Tool registry not configured."
+            raise RuntimeError("Tool registry not configured.")
 
-        observations: List[Dict[str, Any]] = []
-
-        if self.logger:
-            self.logger.log("execution_started", {"request_id": request_id, "num_steps": len(steps)})
+        observations = []
 
         for index, step in enumerate(steps):
-            tool_name = step.get("tool")
-            query = step.get("query")
 
             if self.logger:
-                self.logger.log("step_started", {"request_id": request_id, "step": index + 1, "tool": tool_name, "query_preview": (query[:200] + "...") if query and len(query) > 200 else query})
+                self.logger.log(
+                    "step_started",
+                    {
+                        "request_id": request_id,
+                        "step": index + 1,
+                        "tool": step.get("tool"),
+                    },
+                )
 
-            # Delegate execution to router if present, otherwise call tool directly
             if self.router:
                 response = self.router.execute(step, request_id=request_id)
             else:
-                tool = self.registry.get(tool_name)
+                tool = self.registry.get(step["tool"])
                 response = tool.execute(step)
 
-            # Validate tool response shape
             if not isinstance(response, dict):
-                response = {"status": "error", "data": None, "metadata": {"error": "Invalid tool response format."}}
+                response = {
+                    "status": "error",
+                    "data": None,
+                    "metadata": {"error": "Invalid tool response format."},
+                }
 
-            # Ensure structured response
-            response.setdefault("metadata", {})
-            observations.append({
-                "step": index + 1,
-                "tool": tool_name,
-                "query": query,
-                "response": response
-            })
-
-            if self.logger:
-                self.logger.log("step_completed", {
-                    "request_id": request_id,
+            observations.append(
+                {
                     "step": index + 1,
-                    "tool": tool_name,
-                    "status": response.get("status"),
-                    "metadata": response.get("metadata", {})
-                })
-
-            # Optional: stop early on critical failure (policy decision). Currently we continue.
-
-        total_time = time.time() - start
-
-        if self.logger:
-            self.logger.log("execution_finished", {"request_id": request_id, "total_time": total_time, "num_observations": len(observations)})
-
-        # Synthesize final answer
-        final = self.synthesize_answer(goal, observations)
-
-        if self.logger:
-            self.logger.log("request_completed", {"request_id": request_id, "duration": time.time() - start})
-
-        return final
-
-    # ============================================================
-    # STEP 4: FINAL SYNTHESIS
-    # ============================================================
-    def synthesize_answer(self, goal: str, observations: List[Dict[str, Any]]) -> str:
-        observation_text = ""
-        for obs in observations:
-            data = obs.get("response", {}).get("data", "")
-            status = obs.get("response", {}).get("status", "unknown")
-            observation_text += (
-                f"\nStep {obs['step']} ({obs['tool']} - {obs['query']}):\n"
-                f"status: {status}\n"
-                f"{data}\n"
+                    "tool": step["tool"],
+                    "query": step["query"],
+                    "response": response,
+                }
             )
 
         if self.logger:
-            self.logger.log("synthesis_requested", {"observations_count": len(observations)})
+            self.logger.log(
+                "execution_finished",
+                {"request_id": request_id, "duration": time.time() - start},
+            )
+
+        return self.synthesize_answer(goal, observations)
+
+    # ============================================================
+    # SYNTHESIS
+    # ============================================================
+    def synthesize_answer(
+        self, goal: str, observations: List[Dict[str, Any]]
+    ) -> str:
+
+        observation_text = ""
+
+        for obs in observations:
+            observation_text += (
+                f"\nStep {obs['step']} ({obs['tool']} - {obs['query']}):\n"
+                f"{obs['response'].get('data', '')}\n"
+            )
 
         messages = [
             {
                 "role": "system",
-                "content": """
-You are a summarization agent.
-
-Using ONLY the provided observations,
-produce a complete final answer.
-Do not invent information.
-"""
+                "content": "Use ONLY provided observations. Do not invent.",
             },
             {
                 "role": "user",
-                "content": f"Goal:\n{goal}\n\nObservations:\n{observation_text}"
-            }
+                "content": f"Goal:\n{goal}\n\nObservations:\n{observation_text}",
+            },
         ]
 
         response = chat(model=self.model_name, messages=messages)
-        final_answer = response["message"]["content"]
-
-        if self.logger:
-            self.logger.log("synthesis_completed", {"length": len(final_answer)})
-
-        return final_answer
+        return response["message"]["content"]

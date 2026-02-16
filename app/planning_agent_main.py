@@ -1,28 +1,27 @@
 """
-planning_agent_main.py
-Entry point wiring: constructs infra components, registry, router and planner,
-and runs an interactive command-line session.
+app/planning_agent_main.py
+Enterprise CLI entrypoint.
 """
 
 import sys
 import traceback
 
-from infra.validators import InputValidator
-from registry.tool_registry import ToolRegistry
-from routing.intelligent_router import IntelligentRouter
-from services.planning_agent_service import PlanningAgentService
+from .infra.validators import InputValidator
+from .registry.tool_registry import ToolRegistry
+from .routing.intelligent_router import IntelligentRouter
+from .services.planning_agent_service import PlanningAgentService
 
-from infra.retry_policy import RetryPolicy
-from infra.timeout_executor import TimeoutExecutor
-from infra.reliable_executor import ReliableExecutor
-from infra.logger import StructuredLogger
+from .infra.retry_policy import RetryPolicy
+from .infra.timeout_executor import TimeoutExecutor
+from .infra.reliable_executor import ReliableExecutor
+from .infra.logger import StructuredLogger
 
-from tools.rag_tool import RAGSearchTool
-from tools.web_tool import WebSearchTool
+from .tools.rag_search_tool import RAGSearchTool
+from .tools.web_search_tool import WebSearchTool
 
-from services.embedding_service import EmbeddingService
-from core.vector_store import VectorStore
-from services.retriever_service import RetrieverService
+from .services.embedding_service import EmbeddingService
+from .core.vector_store import VectorStore
+from .services.retriever_service import RetrieverService
 
 
 DATA_PATH = "data/sample.txt"
@@ -32,76 +31,74 @@ STORE_PATH = "data/vector_store.pkl"
 def initialize_registry(logger: StructuredLogger) -> ToolRegistry:
     registry = ToolRegistry()
 
-    # ------------------------------
-    # RAG Tool
-    # ------------------------------
     try:
+        # ------------------------------
+        # RAG Tool Setup
+        # ------------------------------
         embedding_service = EmbeddingService()
         vector_store = VectorStore(DATA_PATH, STORE_PATH, embedding_service.model)
         retriever = RetrieverService(vector_store)
 
-        rag_tool = RAGSearchTool(retriever)
+        rag_tool = RAGSearchTool(
+            embedding_service=embedding_service,
+            retriever=retriever,
+        )
+
         registry.register(rag_tool)
-        logger.log("tool_registered", {"tool": "rag_search"})
-        print("• RAG tool registered.")
 
-    except Exception as e:
-        logger.log("tool_registration_failed", {"tool": "rag_search", "error": str(e)})
-        print("⚠️ RAG initialization failed:", e)
-
-    # ------------------------------
-    # Web Tool
-    # ------------------------------
-    try:
+        # ------------------------------
+        # Web Tool Setup
+        # ------------------------------
         web_tool = WebSearchTool()
         registry.register(web_tool)
-        logger.log("tool_registered", {"tool": "web_search"})
-        print("• Web search tool registered.")
+
+        logger.log("tools_initialized", {"tools": registry.list_tools()})
 
     except Exception as e:
-        logger.log("tool_registration_failed", {"tool": "web_search", "error": str(e)})
-        print("⚠️ Web tool initialization failed:", e)
+        logger.log("tool_initialization_failed", {"error": str(e)})
+        raise
 
     return registry
 
 
 def main():
     try:
-        print("🔄 Initializing system (enterprise agent)...")
-
-        # infra components
         logger = StructuredLogger()
+
+        # ------------------------------
+        # Reliability Layer
+        # ------------------------------
         retry_policy = RetryPolicy(max_retries=2, base_delay=0.5, backoff_factor=2)
         timeout_executor = TimeoutExecutor(timeout_seconds=10)
-        reliable_executor = ReliableExecutor(retry_policy=retry_policy, timeout_executor=timeout_executor)
+        reliable_executor = ReliableExecutor(
+            retry_policy=retry_policy,
+            timeout_executor=timeout_executor,
+        )
 
-        # registry + tools
+        # ------------------------------
+        # Registry + Router
+        # ------------------------------
         registry = initialize_registry(logger)
 
-        if not registry.list_tools():
-            logger.log("startup_no_tools", {"msg": "No tools registered; exiting"})
-            print("❌ No tools registered.")
-            return
-
-        # router + planner
         router = IntelligentRouter(
             registry=registry,
             reliable_executor=reliable_executor,
             logger=logger,
-            similarity_threshold=0.50
+            similarity_threshold=0.50,
         )
 
+        # ------------------------------
+        # Planner
+        # ------------------------------
         agent = PlanningAgentService(
             tool_registry=registry,
             router=router,
-            logger=logger
+            logger=logger,
         )
 
-        print("✅ System ready.\n")
-
-        # --------------------------
-        # CLI input with validation
-        # --------------------------
+        # ------------------------------
+        # CLI Input
+        # ------------------------------
         raw_goal = input("Enter complex goal: ")
 
         try:
@@ -111,7 +108,6 @@ def main():
             print(f"❌ Invalid input: {e}")
             return
 
-        # Generate & run plan
         print("\n--- Generating Plan ---")
         plan = agent.create_plan(goal)
         print(plan)
@@ -123,10 +119,6 @@ def main():
         print(result)
 
     except Exception:
-        logger = locals().get("logger", None)
-        if logger:
-            logger.log("fatal_error", {"error": traceback.format_exc()})
-        print("❌ Unexpected system error occurred.")
         traceback.print_exc()
         sys.exit(1)
 
