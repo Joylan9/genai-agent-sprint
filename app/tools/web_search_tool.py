@@ -1,12 +1,19 @@
+# app/tools/web_search_tool.py
+
 import os
 import requests
 from dotenv import load_dotenv
+from typing import Dict, Any
 
+from app.tools.tools import BaseTool
 
 load_dotenv()
 
 
-class WebSearchTool:
+class WebSearchTool(BaseTool):
+
+    name = "web_search"
+
     def __init__(self):
         self.api_key = os.getenv("SERPAPI_KEY")
 
@@ -15,7 +22,8 @@ class WebSearchTool:
 
         self.base_url = "https://serpapi.com/search.json"
 
-    def search(self, query, num_results=3):
+    def search(self, query: str, num_results: int = 3):
+
         params = {
             "q": query,
             "api_key": self.api_key,
@@ -42,3 +50,32 @@ class WebSearchTool:
             return "No relevant web results found."
 
         return "\n\n".join(results)
+
+    def execute(self, step: Dict[str, Any]) -> Dict[str, Any]:
+
+        raw_query = step.get("query")
+
+        if not isinstance(raw_query, str) or not raw_query.strip():
+            return {
+                "status": "error",
+                "data": None,
+                "metadata": {"error": "Invalid or missing query string."}
+            }
+
+        query: str = raw_query.strip()
+
+        try:
+            result = self.search(query)
+
+            return {
+                "status": "success",
+                "data": result,
+                "metadata": {}
+            }
+
+        except Exception as e:
+            return {
+                "status": "error",
+                "data": None,
+                "metadata": {"error": str(e)}
+            }

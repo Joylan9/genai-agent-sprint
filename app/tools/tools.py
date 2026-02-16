@@ -1,9 +1,15 @@
-class SimpleSearchTool:
-    def search(self, query):
-        # Dummy search logic (can expand later)
-        fake_database = {
-            "machine learning example": "Email spam filtering is a common example of machine learning.",
-            "ai example": "Self-driving cars are an example of AI."
-        }
+"""
+app/tools/tools.py
+Base tool contract for registry compatibility.
+"""
 
-        return fake_database.get(query.lower(), "No results found.")
+from abc import ABC, abstractmethod
+from typing import Dict, Any
+
+
+class BaseTool(ABC):
+    name: str
+
+    @abstractmethod
+    def execute(self, step: Dict[str, Any]) -> Dict[str, Any]:
+        pass
