@@ -8,3 +8,8 @@ class EmbeddingService:
 
     def encode(self, texts):
         return self.model.encode(texts)
+
+    # ✅ Added for Memory Layer compatibility
+    def embed_text(self, text: str):
+        embedding = self.model.encode(text)
+        return embedding.tolist()

@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from api.schemas import AgentRequest, AgentResponse
 from api.dependencies import build_agent
 from app.infra.validators import InputValidator
-from app.memory.database import MongoDB  # ✅ Added
+from app.memory.database import MongoDB
 
 app = FastAPI(
     title="Enterprise AI Agent Engine",
@@ -77,7 +77,7 @@ def health_check():
 
 
 @app.post("/agent/run", response_model=AgentResponse)
-async def run_agent(   # ✅ changed to async
+async def run_agent(
     request: AgentRequest,
     _: None = Depends(verify_api_key),
 ):
@@ -90,7 +90,9 @@ async def run_agent(   # ✅ changed to async
 
         plan = agent.create_plan(validated_goal)
 
-        execution_output = await agent.execute_plan(  # ✅ added await
+        # ✅ FIXED: pass session_id as first argument
+        execution_output = await agent.execute_plan(
+            request.session_id,
             validated_goal,
             plan
         )
