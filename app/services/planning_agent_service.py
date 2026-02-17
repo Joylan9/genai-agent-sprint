@@ -8,6 +8,8 @@ from ollama import chat
 import json
 import re
 import time
+import asyncio
+import inspect
 
 from ..infra.logger import StructuredLogger, generate_request_id
 from ..registry.tool_registry import ToolRegistry
@@ -204,7 +206,11 @@ Fix this malformed JSON. Return ONLY valid JSON:
     # ============================================================
     # EXECUTION
     # ============================================================
-    def execute_plan(self, goal: str, plan_text: str) -> str:
+    async def execute_plan(self, goal: str, plan_text: str):
+        """
+        Asynchronous execution pipeline.
+        This method is async but compatible with sync router/tools because of _maybe_await helper.
+        """
         request_id = generate_request_id()
         start = time.time()
 
@@ -222,12 +228,18 @@ Fix this malformed JSON. Return ONLY valid JSON:
                     "request_failed_plan_parse",
                     {"request_id": request_id, "error": str(e)},
                 )
-            return f"❌ Plan parsing failed: {e}"
+            return {"result": f"❌ Plan parsing failed: {e}", "request_id": request_id}
 
         if not self.registry:
             raise RuntimeError("Tool registry not configured.")
 
         observations = []
+
+        async def _maybe_await(obj):
+            # Await if coroutine/awaitable, else return directly
+            if inspect.isawaitable(obj):
+                return await obj
+            return obj
 
         for index, step in enumerate(steps):
 
@@ -241,11 +253,12 @@ Fix this malformed JSON. Return ONLY valid JSON:
                     },
                 )
 
+            # Execute step via router (if present) or direct tool
             if self.router:
-                response = self.router.execute(step, request_id=request_id)
+                response = await _maybe_await(self.router.execute(step, request_id=request_id))
             else:
                 tool = self.registry.get(step["tool"])
-                response = tool.execute(step)
+                response = await _maybe_await(tool.execute(step))
 
             if not isinstance(response, dict):
                 response = {
@@ -269,7 +282,10 @@ Fix this malformed JSON. Return ONLY valid JSON:
                 {"request_id": request_id, "duration": time.time() - start},
             )
 
-        return self.synthesize_answer(goal, observations)
+        # Synthesize answer (synchronous by default, but safe to await if it becomes async)
+        final_answer = await _maybe_await(self.synthesize_answer(goal, observations))
+
+        return {"result": final_answer, "request_id": request_id}
 
     # ============================================================
     # SYNTHESIS

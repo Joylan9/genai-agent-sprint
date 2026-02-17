@@ -8,6 +8,13 @@ from typing import Optional
 
 
 class AgentRequest(BaseModel):
+    session_id: str = Field(
+        ...,
+        min_length=3,
+        max_length=100,
+        description="Unique session identifier for conversation tracking."
+    )
+
     goal: str = Field(
         ...,
         min_length=1,

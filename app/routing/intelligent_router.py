@@ -5,6 +5,7 @@ applies confidence-based and failure-based fallbacks, and emits structured logs.
 """
 
 from typing import Optional, Dict, Any
+import inspect
 
 from ..registry.tool_registry import ToolRegistry
 from ..infra.reliable_executor import ReliableExecutor
@@ -32,11 +33,16 @@ class IntelligentRouter:
         self.logger = logger
         self.similarity_threshold = similarity_threshold
 
-    def execute(
+    async def execute(
         self,
         step: Dict[str, Any],
         request_id: Optional[str] = None
     ) -> Dict[str, Any]:
+
+        async def _maybe_await(obj):
+            if inspect.isawaitable(obj):
+                return await obj
+            return obj
 
         requested_tool_name = step.get("tool")
 
@@ -66,9 +72,9 @@ class IntelligentRouter:
             return {"status": "error", "data": None, "metadata": {"error": err}}
 
         # ------------------------------
-        # Primary Execution
+        # Primary Execution (via ReliableExecutor)
         # ------------------------------
-        primary_response = self.reliable_executor.execute(tool, step)
+        primary_response = await _maybe_await(self.reliable_executor.execute(tool, step))
         primary_response.setdefault("metadata", {})
         primary_response["metadata"]["requested_tool"] = requested_tool_name
 
@@ -102,8 +108,8 @@ class IntelligentRouter:
                     )
 
                 fallback_tool = self.registry.get("web_search")
-                fallback_response = self.reliable_executor.execute(
-                    fallback_tool, step
+                fallback_response = await _maybe_await(
+                    self.reliable_executor.execute(fallback_tool, step)
                 )
                 fallback_response.setdefault("metadata", {})
                 fallback_response["metadata"]["fallback_from"] = requested_tool_name
@@ -146,8 +152,8 @@ class IntelligentRouter:
 
                 if "web_search" in self.registry.list_tools():
                     fallback_tool = self.registry.get("web_search")
-                    fallback_response = self.reliable_executor.execute(
-                        fallback_tool, step
+                    fallback_response = await _maybe_await(
+                        self.reliable_executor.execute(fallback_tool, step)
                     )
                     fallback_response.setdefault("metadata", {})
                     fallback_response["metadata"]["fallback_from"] = "rag_search"
