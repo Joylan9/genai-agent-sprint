@@ -14,6 +14,7 @@ import inspect
 from ..infra.logger import StructuredLogger, generate_request_id
 from ..registry.tool_registry import ToolRegistry
 from ..routing.intelligent_router import IntelligentRouter
+from ..memory.memory_manager import MemoryManager
 
 
 class PlanningAgentService:
@@ -24,12 +25,14 @@ class PlanningAgentService:
         router: Optional[IntelligentRouter] = None,
         logger: Optional[StructuredLogger] = None,
         max_json_retries: int = 2,
+        memory_manager: Optional[MemoryManager] = None,
     ):
         self.model_name = model_name
         self.registry = tool_registry
         self.router = router
         self.logger = logger
         self.max_json_retries = max_json_retries
+        self.memory = memory_manager or MemoryManager()
 
     # ============================================================
     # PLAN CREATION
@@ -65,7 +68,6 @@ Rules:
             {"role": "user", "content": goal},
         ]
 
-        # === ENFORCE JSON FORMAT + DETERMINISTIC OUTPUT ===
         response = chat(
             model=self.model_name,
             messages=messages,
@@ -74,13 +76,11 @@ Rules:
         )
 
         content = response["message"]["content"]
-        # If the client already parsed JSON into a dict, convert to string for downstream parsing
         if isinstance(content, dict):
             plan_text = json.dumps(content)
         else:
             plan_text = content
 
-        # log raw plan if logger present
         if self.logger:
             try:
                 self.logger.log("planner_raw_output", {"raw": plan_text[:2000]})
@@ -94,17 +94,13 @@ Rules:
     # ============================================================
     def parse_plan_json(self, plan_text: str) -> List[Dict[str, Any]]:
         def extract_json(text: str):
-            # non-greedy match to avoid grabbing trailing braces beyond the JSON block
             match = re.search(r"\{.*?\}", text, re.DOTALL)
             return match.group(0) if match else None
 
-        # If an already-parsed dict was passed in, accept it directly
         if isinstance(plan_text, dict):
             plan = plan_text
-            # validate immediately below
             if "steps" not in plan or not isinstance(plan["steps"], list):
                 raise ValueError("Invalid 'steps' format.")
-            # minimal validation loop reused from below
             for step in plan["steps"]:
                 if (
                     not isinstance(step, dict)
@@ -125,11 +121,9 @@ Rules:
 
         while attempt <= self.max_json_retries:
             try:
-                # First try: direct parse (in case the text is pure JSON string)
                 try:
                     plan = json.loads(current_text)
                 except Exception:
-                    # Fallback: extract JSON substring and parse
                     extracted = extract_json(current_text)
                     if not extracted:
                         raise ValueError("No JSON found.")
@@ -166,7 +160,6 @@ Rules:
                 if attempt >= self.max_json_retries:
                     raise ValueError(f"Plan parsing failed: {e}")
 
-                # Ask the model to repair the JSON — enforce JSON format + deterministic output
                 repair_prompt = f"""
 Fix this malformed JSON. Return ONLY valid JSON:
 
@@ -189,16 +182,6 @@ Fix this malformed JSON. Return ONLY valid JSON:
                 else:
                     current_text = repair_content
 
-                # log repair attempt
-                if self.logger:
-                    try:
-                        self.logger.log(
-                            "plan_repair_attempt",
-                            {"attempt": attempt, "repair_preview": current_text[:1000]},
-                        )
-                    except Exception:
-                        pass
-
                 attempt += 1
 
         raise ValueError("JSON parsing failure.")
@@ -206,11 +189,7 @@ Fix this malformed JSON. Return ONLY valid JSON:
     # ============================================================
     # EXECUTION
     # ============================================================
-    async def execute_plan(self, goal: str, plan_text: str):
-        """
-        Asynchronous execution pipeline.
-        This method is async but compatible with sync router/tools because of _maybe_await helper.
-        """
+    async def execute_plan(self, session_id: str, goal: str, plan_text: str):
         request_id = generate_request_id()
         start = time.time()
 
@@ -230,30 +209,15 @@ Fix this malformed JSON. Return ONLY valid JSON:
                 )
             return {"result": f"❌ Plan parsing failed: {e}", "request_id": request_id}
 
-        if not self.registry:
-            raise RuntimeError("Tool registry not configured.")
-
         observations = []
 
         async def _maybe_await(obj):
-            # Await if coroutine/awaitable, else return directly
             if inspect.isawaitable(obj):
                 return await obj
             return obj
 
         for index, step in enumerate(steps):
 
-            if self.logger:
-                self.logger.log(
-                    "step_started",
-                    {
-                        "request_id": request_id,
-                        "step": index + 1,
-                        "tool": step.get("tool"),
-                    },
-                )
-
-            # Execute step via router (if present) or direct tool
             if self.router:
                 response = await _maybe_await(self.router.execute(step, request_id=request_id))
             else:
@@ -276,14 +240,38 @@ Fix this malformed JSON. Return ONLY valid JSON:
                 }
             )
 
+        # ----------------------------
+        # Retrieve Memory Context
+        # ----------------------------
+        memory_context = await self.memory.retrieve_context(
+            session_id=session_id,
+            query=goal,
+            recent_limit=5,
+            semantic_top_k=3
+        )
+
+        final_answer = await _maybe_await(
+            self.synthesize_answer(
+                goal,
+                observations,
+                memory_context
+            )
+        )
+
+        # ----------------------------
+        # Save Interaction
+        # ----------------------------
+        await self.memory.save_interaction(
+            session_id=session_id,
+            user_message=goal,
+            assistant_message=final_answer
+        )
+
         if self.logger:
             self.logger.log(
                 "execution_finished",
                 {"request_id": request_id, "duration": time.time() - start},
             )
-
-        # Synthesize answer (synchronous by default, but safe to await if it becomes async)
-        final_answer = await _maybe_await(self.synthesize_answer(goal, observations))
 
         return {"result": final_answer, "request_id": request_id}
 
@@ -291,7 +279,10 @@ Fix this malformed JSON. Return ONLY valid JSON:
     # SYNTHESIS
     # ============================================================
     def synthesize_answer(
-        self, goal: str, observations: List[Dict[str, Any]]
+        self,
+        goal: str,
+        observations: List[Dict[str, Any]],
+        memory_context: Optional[Dict[str, Any]] = None
     ) -> str:
 
         observation_text = ""
@@ -302,23 +293,48 @@ Fix this malformed JSON. Return ONLY valid JSON:
                 f"{obs['response'].get('data', '')}\n"
             )
 
+        memory_text = ""
+
+        if memory_context:
+            recent = memory_context.get("recent_messages", [])
+            relevant = memory_context.get("relevant_memory", [])
+
+            if recent:
+                memory_text += "\nRecent Conversation:\n"
+                for msg in recent:
+                    memory_text += f"{msg.get('role')}: {msg.get('content')}\n"
+
+            if relevant:
+                memory_text += "\nRelevant Past Memory:\n"
+                for mem in relevant:
+                    memory_text += f"{mem.get('text')}\n"
+
         messages = [
             {
                 "role": "system",
-                "content": "Use ONLY provided observations. Do not invent.",
+                "content": "Use ONLY provided observations and memory. Do not invent.",
             },
             {
                 "role": "user",
-                "content": f"Goal:\n{goal}\n\nObservations:\n{observation_text}",
+                "content": f"""
+Goal:
+{goal}
+
+Memory:
+{memory_text}
+
+Observations:
+{observation_text}
+""",
             },
         ]
 
-        # Synthesis should be human-readable free-form text — do not force JSON here.
         response = chat(model=self.model_name, messages=messages)
         content = response["message"]["content"]
+
         if isinstance(content, dict):
-            # If structured, try to extract a text answer field if present, otherwise dump
             if "answer" in content and isinstance(content["answer"], str):
                 return content["answer"]
             return json.dumps(content)
+
         return content
