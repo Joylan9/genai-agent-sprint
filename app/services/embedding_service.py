@@ -9,7 +9,13 @@ class EmbeddingService:
     def encode(self, texts):
         return self.model.encode(texts)
 
-    # ✅ Added for Memory Layer compatibility
+    # ✅ Fixed for Memory Layer compatibility (safe conversion)
     def embed_text(self, text: str):
         embedding = self.model.encode(text)
-        return embedding.tolist()
+
+        # If numpy array → convert to list
+        if hasattr(embedding, "tolist"):
+            return embedding.tolist()
+
+        # If already list → return directly
+        return embedding
