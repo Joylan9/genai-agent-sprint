@@ -8,13 +8,24 @@ from fastapi import FastAPI, HTTPException, Header, Depends, Request
 from fastapi.responses import JSONResponse
 from api.schemas import AgentRequest, AgentResponse
 from api.dependencies import build_agent
-from app.infra.validators import InputValidator  # ✅ Added
+from app.infra.validators import InputValidator
+from app.memory.database import MongoDB  # ✅ Added
 
 app = FastAPI(
     title="Enterprise AI Agent Engine",
     version="1.0.0",
     description="Production-ready AI agent with routing, reliability, and hybrid search."
 )
+
+# ============================================================
+# MONGODB STARTUP INITIALIZATION  ✅ Added
+# ============================================================
+@app.on_event("startup")
+async def startup_event():
+    MongoDB.connect()
+    await MongoDB.initialize_indexes()
+    print("✅ MongoDB connected and indexes ensured.")
+
 
 # Build agent once at startup
 agent = build_agent()
@@ -28,7 +39,7 @@ MAX_REQUEST_SIZE = 1000
 
 
 # ============================================================
-# REQUEST SIZE MIDDLEWARE (Corrected + Debug Logging)
+# REQUEST SIZE MIDDLEWARE
 # ============================================================
 @app.middleware("http")
 async def limit_request_size(request: Request, call_next):
@@ -44,7 +55,6 @@ async def limit_request_size(request: Request, call_next):
             content={"detail": "Request size exceeds allowed limit."},
         )
 
-    # Re-attach body so downstream handlers can read it
     async def receive():
         return {"type": "http.request", "body": body}
 
@@ -69,10 +79,10 @@ def health_check():
 @app.post("/agent/run", response_model=AgentResponse)
 def run_agent(
     request: AgentRequest,
-    _: None = Depends(verify_api_key),  # 🔐 Enforce API key
+    _: None = Depends(verify_api_key),
 ):
     try:
-        # ✅ Input validation added
+        # Input validation
         try:
             validated_goal = InputValidator.validate_goal(request.goal)
         except ValueError as e:
@@ -81,7 +91,6 @@ def run_agent(
         plan = agent.create_plan(validated_goal)
         execution_output = agent.execute_plan(validated_goal, plan)
 
-        # ✅ Properly forward result + request_id
         return AgentResponse(
             result=execution_output["result"],
             request_id=execution_output["request_id"],
