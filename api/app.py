@@ -92,7 +92,6 @@ async def metrics():
 @app.get("/ready")
 async def readiness():
     try:
-        # motor's command is async; this will raise if DB not reachable
         await MongoDB.get_database().command("ping")
         return {"status": "ready"}
     except Exception:
@@ -100,6 +99,27 @@ async def readiness():
             content="Database not ready",
             status_code=503
         )
+
+
+# ----------------------------
+# TRACE DEBUG ENDPOINT
+# ----------------------------
+@app.get("/traces/{request_id}")
+async def get_trace(
+    request_id: str,
+    _: None = Depends(verify_api_key),
+):
+    db = MongoDB.get_database()
+
+    trace = await db.traces.find_one({"request_id": request_id})
+
+    if not trace:
+        raise HTTPException(status_code=404, detail="Trace not found")
+
+    # Convert ObjectId to string for JSON serialization
+    trace["_id"] = str(trace["_id"])
+
+    return trace
 
 
 @app.post("/agent/run", response_model=AgentResponse)
@@ -116,7 +136,6 @@ async def run_agent(
 
         plan = agent.create_plan(validated_goal)
 
-        # ✅ FIXED: pass session_id as first argument
         execution_output = await agent.execute_plan(
             request.session_id,
             validated_goal,
