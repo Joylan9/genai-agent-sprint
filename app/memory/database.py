@@ -39,6 +39,15 @@ class MongoDB:
 
         return cls._db
 
+    # ✅ ADDED — REQUIRED FOR TRACE INSERTS
+    @classmethod
+    def get_database(cls):
+        """
+        Returns the database handle.
+        Ensures connection is initialized.
+        """
+        return cls.connect()
+
     @classmethod
     async def initialize_indexes(cls):
         """
@@ -53,3 +62,8 @@ class MongoDB:
         # Long-term memory collection indexes
         await db.long_term_memory.create_index([("session_id", ASCENDING)])
         await db.long_term_memory.create_index([("created_at", ASCENDING)])
+
+        # ✅ ADDED — Trace collection indexes
+        await db.traces.create_index([("request_id", ASCENDING)], unique=True)
+        await db.traces.create_index([("session_id", ASCENDING)])
+        await db.traces.create_index([("timestamp", ASCENDING)])
