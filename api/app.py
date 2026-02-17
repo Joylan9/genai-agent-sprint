@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException, Header, Depends, Request
 from fastapi.responses import JSONResponse
 from api.schemas import AgentRequest, AgentResponse
 from api.dependencies import build_agent
+from app.infra.validators import InputValidator  # ✅ Added
 
 app = FastAPI(
     title="Enterprise AI Agent Engine",
@@ -21,22 +22,33 @@ agent = build_agent()
 # Load API key from environment
 API_KEY = os.getenv("API_KEY", "supersecretkey")
 
-# Maximum allowed request size (1MB)
-MAX_REQUEST_SIZE = 1 * 1024 * 1024
+# Maximum allowed request size (currently 1KB for testing)
+MAX_REQUEST_SIZE = 1000
+# MAX_REQUEST_SIZE = 1 * 1024 * 1024  # 1MB for production
 
 
 # ============================================================
-# REQUEST SIZE MIDDLEWARE
+# REQUEST SIZE MIDDLEWARE (Corrected + Debug Logging)
 # ============================================================
 @app.middleware("http")
 async def limit_request_size(request: Request, call_next):
-    content_length = request.headers.get("content-length")
+    body = await request.body()
+    body_size = len(body)
 
-    if content_length and int(content_length) > MAX_REQUEST_SIZE:
+    print(f"[DEBUG] Incoming request size: {body_size} bytes")
+
+    if body_size > MAX_REQUEST_SIZE:
+        print("[DEBUG] Request blocked due to size limit.")
         return JSONResponse(
             status_code=413,
             content={"detail": "Request size exceeds allowed limit."},
         )
+
+    # Re-attach body so downstream handlers can read it
+    async def receive():
+        return {"type": "http.request", "body": body}
+
+    request._receive = receive
 
     return await call_next(request)
 
@@ -60,10 +72,22 @@ def run_agent(
     _: None = Depends(verify_api_key),  # 🔐 Enforce API key
 ):
     try:
-        plan = agent.create_plan(request.goal)
-        result = agent.execute_plan(request.goal, plan)
+        # ✅ Input validation added
+        try:
+            validated_goal = InputValidator.validate_goal(request.goal)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
-        return AgentResponse(result=result)
+        plan = agent.create_plan(validated_goal)
+        execution_output = agent.execute_plan(validated_goal, plan)
 
+        # ✅ Properly forward result + request_id
+        return AgentResponse(
+            result=execution_output["result"],
+            request_id=execution_output["request_id"],
+        )
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
