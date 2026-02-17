@@ -18,7 +18,7 @@ app = FastAPI(
 )
 
 # ============================================================
-# MONGODB STARTUP INITIALIZATION  ✅ Added
+# MONGODB STARTUP INITIALIZATION
 # ============================================================
 @app.on_event("startup")
 async def startup_event():
@@ -77,7 +77,7 @@ def health_check():
 
 
 @app.post("/agent/run", response_model=AgentResponse)
-def run_agent(
+async def run_agent(   # ✅ changed to async
     request: AgentRequest,
     _: None = Depends(verify_api_key),
 ):
@@ -89,7 +89,11 @@ def run_agent(
             raise HTTPException(status_code=400, detail=str(e))
 
         plan = agent.create_plan(validated_goal)
-        execution_output = agent.execute_plan(validated_goal, plan)
+
+        execution_output = await agent.execute_plan(  # ✅ added await
+            validated_goal,
+            plan
+        )
 
         return AgentResponse(
             result=execution_output["result"],
