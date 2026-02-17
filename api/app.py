@@ -4,7 +4,8 @@ FastAPI entrypoint for the Enterprise AI Agent Engine.
 """
 
 import os
-from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi import FastAPI, HTTPException, Header, Depends, Request
+from fastapi.responses import JSONResponse
 from api.schemas import AgentRequest, AgentResponse
 from api.dependencies import build_agent
 
@@ -19,6 +20,25 @@ agent = build_agent()
 
 # Load API key from environment
 API_KEY = os.getenv("API_KEY", "supersecretkey")
+
+# Maximum allowed request size (1MB)
+MAX_REQUEST_SIZE = 1 * 1024 * 1024
+
+
+# ============================================================
+# REQUEST SIZE MIDDLEWARE
+# ============================================================
+@app.middleware("http")
+async def limit_request_size(request: Request, call_next):
+    content_length = request.headers.get("content-length")
+
+    if content_length and int(content_length) > MAX_REQUEST_SIZE:
+        return JSONResponse(
+            status_code=413,
+            content={"detail": "Request size exceeds allowed limit."},
+        )
+
+    return await call_next(request)
 
 
 # ============================================================
