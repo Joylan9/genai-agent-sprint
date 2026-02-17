@@ -28,7 +28,7 @@ from ..memory.database import MongoDB
 class PlanningAgentService:
     def __init__(
         self,
-        model_name: str = "llama3",
+        model_name: str = "llama3:8b-instruct-q4_K_M",
         tool_registry: Optional[ToolRegistry] = None,
         router: Optional[IntelligentRouter] = None,
         logger: Optional[StructuredLogger] = None,
