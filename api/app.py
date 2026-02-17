@@ -4,12 +4,13 @@ FastAPI entrypoint for the Enterprise AI Agent Engine.
 """
 
 import os
-from fastapi import FastAPI, HTTPException, Header, Depends, Request
+from fastapi import FastAPI, HTTPException, Header, Depends, Request, Response
 from fastapi.responses import JSONResponse
 from api.schemas import AgentRequest, AgentResponse
 from api.dependencies import build_agent
 from app.infra.validators import InputValidator
 from app.memory.database import MongoDB
+from app.infra.logger import metrics_response
 
 app = FastAPI(
     title="Enterprise AI Agent Engine",
@@ -74,6 +75,31 @@ def verify_api_key(x_api_key: str = Header(None)):
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+# ----------------------------
+# Prometheus metrics endpoint
+# ----------------------------
+@app.get("/metrics")
+async def metrics():
+    data, content_type = metrics_response()
+    return Response(content=data, media_type=content_type)
+
+
+# ----------------------------
+# Readiness endpoint (DB)
+# ----------------------------
+@app.get("/ready")
+async def readiness():
+    try:
+        # motor's command is async; this will raise if DB not reachable
+        await MongoDB.get_database().command("ping")
+        return {"status": "ready"}
+    except Exception:
+        return Response(
+            content="Database not ready",
+            status_code=503
+        )
 
 
 @app.post("/agent/run", response_model=AgentResponse)

@@ -11,10 +11,18 @@ import time
 import asyncio
 import inspect
 
-from ..infra.logger import StructuredLogger, generate_request_id
+from datetime import datetime
+
+from ..infra.logger import (
+    StructuredLogger,
+    generate_request_id,
+    REQUEST_COUNTER,
+    REQUEST_LATENCY,
+)
 from ..registry.tool_registry import ToolRegistry
 from ..routing.intelligent_router import IntelligentRouter
 from ..memory.memory_manager import MemoryManager
+from ..memory.database import MongoDB
 
 
 class PlanningAgentService:
@@ -191,6 +199,9 @@ Fix this malformed JSON. Return ONLY valid JSON:
     # ============================================================
     async def execute_plan(self, session_id: str, goal: str, plan_text: str):
         request_id = generate_request_id()
+
+        # increment request counter and record start time
+        REQUEST_COUNTER.inc()
         start = time.time()
 
         if self.logger:
@@ -267,10 +278,38 @@ Fix this malformed JSON. Return ONLY valid JSON:
             assistant_message=final_answer
         )
 
+        # ----------------------------
+        # Persist trace to MongoDB
+        # ----------------------------
+        try:
+            db = MongoDB.get_database()
+            # insert_one is async for motor
+            await db.traces.insert_one({
+                "request_id": request_id,
+                "session_id": session_id,
+                "goal": goal,
+                "plan": plan_text,
+                "steps": steps,
+                "observations": observations,
+                "final_answer": final_answer,
+                "timestamp": datetime.utcnow()
+            })
+        except Exception as exc:
+            # Do not fail the request if trace persistence fails; log and continue.
+            if self.logger:
+                self.logger.log(
+                    "trace_persist_failed",
+                    {"request_id": request_id, "error": str(exc)}
+                )
+
+        # record latency metric
+        total_latency = time.time() - start
+        REQUEST_LATENCY.observe(total_latency)
+
         if self.logger:
             self.logger.log(
                 "execution_finished",
-                {"request_id": request_id, "duration": time.time() - start},
+                {"request_id": request_id, "duration": total_latency},
             )
 
         return {"result": final_answer, "request_id": request_id}
