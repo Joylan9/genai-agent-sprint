@@ -297,7 +297,8 @@ Fix this malformed JSON. Return ONLY valid JSON:
             },
         ]
 
-        response = chat(model=self.model_name, messages=messages, format="json", options={"temperature": 0})
+        # Synthesis should be human-readable free-form text — do not force JSON here.
+        response = chat(model=self.model_name, messages=messages)
         content = response["message"]["content"]
         if isinstance(content, dict):
             # If structured, try to extract a text answer field if present, otherwise dump

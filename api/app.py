@@ -3,7 +3,8 @@ api/app.py
 FastAPI entrypoint for the Enterprise AI Agent Engine.
 """
 
-from fastapi import FastAPI, HTTPException
+import os
+from fastapi import FastAPI, HTTPException, Header, Depends
 from api.schemas import AgentRequest, AgentResponse
 from api.dependencies import build_agent
 
@@ -16,6 +17,17 @@ app = FastAPI(
 # Build agent once at startup
 agent = build_agent()
 
+# Load API key from environment
+API_KEY = os.getenv("API_KEY", "supersecretkey")
+
+
+# ============================================================
+# API KEY DEPENDENCY
+# ============================================================
+def verify_api_key(x_api_key: str = Header(None)):
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
 
 @app.get("/health")
 def health_check():
@@ -23,7 +35,10 @@ def health_check():
 
 
 @app.post("/agent/run", response_model=AgentResponse)
-def run_agent(request: AgentRequest):
+def run_agent(
+    request: AgentRequest,
+    _: None = Depends(verify_api_key),  # 🔐 Enforce API key
+):
     try:
         plan = agent.create_plan(request.goal)
         result = agent.execute_plan(request.goal, plan)
