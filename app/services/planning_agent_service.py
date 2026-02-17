@@ -63,27 +63,75 @@ Rules:
             {"role": "user", "content": goal},
         ]
 
-        response = chat(model=self.model_name, messages=messages)
-        return response["message"]["content"]
+        # === ENFORCE JSON FORMAT + DETERMINISTIC OUTPUT ===
+        response = chat(
+            model=self.model_name,
+            messages=messages,
+            format="json",
+            options={"temperature": 0},
+        )
+
+        content = response["message"]["content"]
+        # If the client already parsed JSON into a dict, convert to string for downstream parsing
+        if isinstance(content, dict):
+            plan_text = json.dumps(content)
+        else:
+            plan_text = content
+
+        # log raw plan if logger present
+        if self.logger:
+            try:
+                self.logger.log("planner_raw_output", {"raw": plan_text[:2000]})
+            except Exception:
+                pass
+
+        return plan_text
 
     # ============================================================
     # JSON PARSING
     # ============================================================
     def parse_plan_json(self, plan_text: str) -> List[Dict[str, Any]]:
         def extract_json(text: str):
-            match = re.search(r"\{.*\}", text, re.DOTALL)
+            # non-greedy match to avoid grabbing trailing braces beyond the JSON block
+            match = re.search(r"\{.*?\}", text, re.DOTALL)
             return match.group(0) if match else None
+
+        # If an already-parsed dict was passed in, accept it directly
+        if isinstance(plan_text, dict):
+            plan = plan_text
+            # validate immediately below
+            if "steps" not in plan or not isinstance(plan["steps"], list):
+                raise ValueError("Invalid 'steps' format.")
+            # minimal validation loop reused from below
+            for step in plan["steps"]:
+                if (
+                    not isinstance(step, dict)
+                    or "tool" not in step
+                    or "query" not in step
+                    or not isinstance(step["tool"], str)
+                    or not isinstance(step["query"], str)
+                ):
+                    raise ValueError("Invalid step format.")
+                if len(step["query"]) > 3000:
+                    raise ValueError("Step query too long.")
+                if self.registry and step["tool"] not in self.registry.list_tools():
+                    raise ValueError(f"Unknown tool: {step['tool']}")
+            return plan["steps"]
 
         attempt = 0
         current_text = plan_text
 
         while attempt <= self.max_json_retries:
             try:
-                extracted = extract_json(current_text)
-                if not extracted:
-                    raise ValueError("No JSON found.")
-
-                plan = json.loads(extracted)
+                # First try: direct parse (in case the text is pure JSON string)
+                try:
+                    plan = json.loads(current_text)
+                except Exception:
+                    # Fallback: extract JSON substring and parse
+                    extracted = extract_json(current_text)
+                    if not extracted:
+                        raise ValueError("No JSON found.")
+                    plan = json.loads(extracted)
 
                 if "steps" not in plan or not isinstance(plan["steps"], list):
                     raise ValueError("Invalid 'steps' format.")
@@ -116,6 +164,7 @@ Rules:
                 if attempt >= self.max_json_retries:
                     raise ValueError(f"Plan parsing failed: {e}")
 
+                # Ask the model to repair the JSON — enforce JSON format + deterministic output
                 repair_prompt = f"""
 Fix this malformed JSON. Return ONLY valid JSON:
 
@@ -128,9 +177,26 @@ Fix this malformed JSON. Return ONLY valid JSON:
                         {"role": "system", "content": "Fix JSON only."},
                         {"role": "user", "content": repair_prompt},
                     ],
+                    format="json",
+                    options={"temperature": 0},
                 )
 
-                current_text = repair_response["message"]["content"]
+                repair_content = repair_response["message"]["content"]
+                if isinstance(repair_content, dict):
+                    current_text = json.dumps(repair_content)
+                else:
+                    current_text = repair_content
+
+                # log repair attempt
+                if self.logger:
+                    try:
+                        self.logger.log(
+                            "plan_repair_attempt",
+                            {"attempt": attempt, "repair_preview": current_text[:1000]},
+                        )
+                    except Exception:
+                        pass
+
                 attempt += 1
 
         raise ValueError("JSON parsing failure.")
@@ -231,5 +297,11 @@ Fix this malformed JSON. Return ONLY valid JSON:
             },
         ]
 
-        response = chat(model=self.model_name, messages=messages)
-        return response["message"]["content"]
+        response = chat(model=self.model_name, messages=messages, format="json", options={"temperature": 0})
+        content = response["message"]["content"]
+        if isinstance(content, dict):
+            # If structured, try to extract a text answer field if present, otherwise dump
+            if "answer" in content and isinstance(content["answer"], str):
+                return content["answer"]
+            return json.dumps(content)
+        return content
