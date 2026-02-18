@@ -25,6 +25,9 @@ from ..memory.memory_manager import MemoryManager
 from ..memory.database import MongoDB
 from ..cache.response_cache import ResponseCache
 
+# ---------- New import: Guardrails ----------
+from ..security.guardrails import Guardrails
+
 
 class PlanningAgentService:
     def __init__(
@@ -47,11 +50,27 @@ class PlanningAgentService:
         db = MongoDB.get_database()
         self.cache = ResponseCache(db)
 
+        # ---------- Initialize Guardrails ----------
+        allowed_tools = []
+        try:
+            if self.registry:
+                # registry.list_tools() expected to be sync returning list
+                allowed_tools = self.registry.list_tools()
+        except Exception:
+            # if registry not ready or fails, default to empty whitelist (tightest)
+            allowed_tools = []
+
+        self.guardrails = Guardrails(allowed_tools=allowed_tools)
+
     # ============================================================
     # PLAN CREATION
     # ============================================================
 
     def create_plan(self, goal: str) -> str:
+        # ---------- Validate input BEFORE planner ----------
+        # Hard-block on injection attempts or invalid input
+        self.guardrails.validate_user_input(goal)
+
         available_tools = ", ".join(
             self.registry.list_tools() if self.registry else []
         )
@@ -184,6 +203,10 @@ Rules:
         steps = self.parse_plan_json(plan_text)
         planner_latency = time.time() - planner_start
 
+        # ---------- Guardrail: validate parsed plan ----------
+        # Hard-block if plan fails rules (tool whitelist, step limits, step structure)
+        self.guardrails.validate_plan(steps)
+
         # ============================================================
         # 🔥 ENTERPRISE CACHE CHECK (BEFORE TOOLS)
         # ============================================================
@@ -286,8 +309,73 @@ Rules:
             response = result["response"]
             metadata = response.get("metadata", {})
 
+            # If tool published its own execution time, collect it
             if "total_execution_time" in metadata:
-                tool_total_latency += float(metadata["total_execution_time"])
+                try:
+                    tool_total_latency += float(metadata["total_execution_time"])
+                except Exception:
+                    pass
+
+            # ---------- Guardrail: sanitize tool output ----------
+            # Try to extract a textual representation of data to scan for injection/leakage
+            data_to_scan = ""
+            if isinstance(response, dict):
+                # prefer .get('data'), otherwise stringify the whole response
+                data_to_scan = response.get("data", "")
+                if data_to_scan is None:
+                    data_to_scan = ""
+                if not isinstance(data_to_scan, str):
+                    # attempt to stringify reasonably
+                    try:
+                        data_to_scan = json.dumps(data_to_scan)
+                    except Exception:
+                        data_to_scan = str(data_to_scan)
+            else:
+                # non-dict, cast to str
+                data_to_scan = str(response)
+
+            try:
+                # may raise ValueError (hard-block); we let it propagate up to caller
+                self.guardrails.sanitize_tool_output(data_to_scan)
+            except Exception as e:
+                # convert to an error-style observation (so traces contain cause) then raise
+                # we store as an error observation and abort after recording trace
+                err_obs = {
+                    "step": result["step"],
+                    "tool": result.get("tool"),
+                    "query": result.get("query"),
+                    "response": {
+                        "status": "error",
+                        "data": None,
+                        "metadata": {"error": f"guardrails: {str(e)}"}
+                    }
+                }
+                # Persist trace indicating guardrail hit and then raise to block request
+                try:
+                    db = MongoDB.get_database()
+                    await db.traces.insert_one({
+                        "request_id": request_id,
+                        "session_id": session_id,
+                        "goal": goal,
+                        "plan": plan_text,
+                        "steps": steps,
+                        "observations": [err_obs],
+                        "final_answer": None,
+                        "cache_hit": False,
+                        "latency": {
+                            "planner": planner_latency,
+                            "tool_total": tool_total_latency,
+                            "tool_wall_time": time.time() - tool_wall_start,
+                            "synthesis": 0.0,
+                            "total": time.time() - total_start
+                        },
+                        "timestamp": datetime.utcnow()
+                    })
+                except Exception:
+                    pass
+
+                # Hard-block: raise to caller
+                raise
 
             observations.append(
                 {
@@ -321,6 +409,15 @@ Rules:
         )
         synthesis_latency = time.time() - synthesis_start
 
+        # ---------- Guardrail: final answer check ----------
+        # Hard-block on sensitive leakage in final answer
+        self.guardrails.validate_final_answer(final_answer)
+
+        # ---------- Guardrail: memory write protection ----------
+        # Hard-block if final answer contains phrases that would poison memory if saved
+        self.guardrails.validate_memory_write(final_answer)
+
+        # At this point, final_answer passed guardrails; cache and persist
         await self.cache.set(goal, plan_text, final_answer)
 
         await self.memory.save_interaction(
