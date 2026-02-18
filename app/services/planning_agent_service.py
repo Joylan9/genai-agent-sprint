@@ -48,7 +48,7 @@ class PlanningAgentService:
         self.cache = ResponseCache(db)
 
     # ============================================================
-    # PLAN CREATION (unchanged)
+    # PLAN CREATION
     # ============================================================
 
     def create_plan(self, goal: str) -> str:
@@ -104,7 +104,7 @@ Rules:
         return plan_text
 
     # ============================================================
-    # JSON PARSING (unchanged)
+    # JSON PARSING
     # ============================================================
 
     def parse_plan_json(self, plan_text: str) -> List[Dict[str, Any]]:
@@ -169,7 +169,7 @@ Rules:
         raise ValueError("JSON parsing failure.")
 
     # ============================================================
-    # EXECUTION (WITH SMART CACHE + ENTERPRISE PARALLEL TOOLS)
+    # EXECUTION
     # ============================================================
 
     async def execute_plan(self, session_id: str, goal: str, plan_text: str):
@@ -177,9 +177,52 @@ Rules:
         REQUEST_COUNTER.inc()
         total_start = time.time()
 
+        # ----------------------------
+        # PLAN PARSE
+        # ----------------------------
         planner_start = time.time()
         steps = self.parse_plan_json(plan_text)
         planner_latency = time.time() - planner_start
+
+        # ============================================================
+        # 🔥 ENTERPRISE CACHE CHECK (BEFORE TOOLS)
+        # ============================================================
+
+        cached_response = await self.cache.get(goal, plan_text)
+
+        if cached_response:
+            total_latency = time.time() - total_start
+
+            try:
+                db = MongoDB.get_database()
+                await db.traces.insert_one({
+                    "request_id": request_id,
+                    "session_id": session_id,
+                    "goal": goal,
+                    "plan": plan_text,
+                    "steps": steps,
+                    "observations": [],
+                    "final_answer": cached_response,
+                    "cache_hit": True,
+                    "latency": {
+                        "planner": planner_latency,
+                        "tool_total": 0.0,
+                        "tool_wall_time": 0.0,
+                        "synthesis": 0.0,
+                        "total": total_latency
+                    },
+                    "timestamp": datetime.utcnow()
+                })
+            except Exception:
+                pass
+
+            REQUEST_LATENCY.observe(total_latency)
+
+            return {"result": cached_response, "request_id": request_id}
+
+        # ============================================================
+        # 🚀 TOOL EXECUTION (ONLY IF CACHE MISS)
+        # ============================================================
 
         observations = []
 
@@ -190,10 +233,6 @@ Rules:
 
         tool_total_latency = 0.0
         tool_wall_start = time.time()
-
-        # ============================================================
-        # ENTERPRISE PARALLEL TOOL EXECUTION
-        # ============================================================
 
         MAX_PARALLEL_TOOLS = 4
         semaphore = asyncio.Semaphore(MAX_PARALLEL_TOOLS)
@@ -237,30 +276,16 @@ Rules:
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        processed_results = []
-
-        for result in results:
-            if isinstance(result, Exception):
-                processed_results.append({
-                    "index": -1,
-                    "step": -1,
-                    "tool": "unknown",
-                    "query": "",
-                    "response": {
-                        "status": "error",
-                        "data": None,
-                        "metadata": {"error": str(result)},
-                    },
-                })
-            else:
-                processed_results.append(result)
+        processed_results = [
+            r for r in results if not isinstance(r, Exception)
+        ]
 
         processed_results.sort(key=lambda x: x["index"])
 
         for result in processed_results:
             response = result["response"]
-
             metadata = response.get("metadata", {})
+
             if "total_execution_time" in metadata:
                 tool_total_latency += float(metadata["total_execution_time"])
 
@@ -275,6 +300,10 @@ Rules:
 
         tool_wall_time = time.time() - tool_wall_start
 
+        # ----------------------------
+        # MEMORY
+        # ----------------------------
+
         memory_context = await self.memory.retrieve_context(
             session_id=session_id,
             query=goal,
@@ -282,32 +311,25 @@ Rules:
             semantic_top_k=3
         )
 
-        # ============================================================
-        # CACHE CHECK (Before Synthesis)
-        # ============================================================
+        # ----------------------------
+        # SYNTHESIS
+        # ----------------------------
 
-        cached_response = await self.cache.get(goal, plan_text)
+        synthesis_start = time.time()
+        final_answer = await _maybe_await(
+            self.synthesize_answer(goal, observations, memory_context)
+        )
+        synthesis_latency = time.time() - synthesis_start
 
-        if cached_response:
-            final_answer = cached_response
-            synthesis_latency = 0.0
-            cache_hit = True
-        else:
-            cache_hit = False
-
-            synthesis_start = time.time()
-            final_answer = await _maybe_await(
-                self.synthesize_answer(goal, observations, memory_context)
-            )
-            synthesis_latency = time.time() - synthesis_start
-
-            await self.cache.set(goal, plan_text, final_answer)
+        await self.cache.set(goal, plan_text, final_answer)
 
         await self.memory.save_interaction(
             session_id=session_id,
             user_message=goal,
             assistant_message=final_answer
         )
+
+        total_latency = time.time() - total_start
 
         try:
             db = MongoDB.get_database()
@@ -319,20 +341,84 @@ Rules:
                 "steps": steps,
                 "observations": observations,
                 "final_answer": final_answer,
-                "cache_hit": cache_hit,
+                "cache_hit": False,
                 "latency": {
                     "planner": planner_latency,
                     "tool_total": tool_total_latency,
                     "tool_wall_time": tool_wall_time,
                     "synthesis": synthesis_latency,
-                    "total": time.time() - total_start
+                    "total": total_latency
                 },
                 "timestamp": datetime.utcnow()
             })
         except Exception:
             pass
 
-        total_latency = time.time() - total_start
         REQUEST_LATENCY.observe(total_latency)
 
         return {"result": final_answer, "request_id": request_id}
+
+    # ============================================================
+    # SYNTHESIS (ADDED BACK)
+    # ============================================================
+
+    def synthesize_answer(
+        self,
+        goal: str,
+        observations: List[Dict[str, Any]],
+        memory_context: Optional[Dict[str, Any]] = None
+    ) -> str:
+
+        observation_text = ""
+
+        for obs in observations:
+            observation_text += (
+                f"\nStep {obs['step']} ({obs['tool']} - {obs['query']}):\n"
+                f"{obs['response'].get('data', '')}\n"
+            )
+
+        memory_text = ""
+
+        if memory_context:
+            recent = memory_context.get("recent_messages", [])
+            relevant = memory_context.get("relevant_memory", [])
+
+            if recent:
+                memory_text += "\nRecent Conversation:\n"
+                for msg in recent:
+                    memory_text += f"{msg.get('role')}: {msg.get('content')}\n"
+
+            if relevant:
+                memory_text += "\nRelevant Past Memory:\n"
+                for mem in relevant:
+                    memory_text += f"{mem.get('text')}\n"
+
+        messages = [
+            {
+                "role": "system",
+                "content": "Use ONLY provided observations and memory. Do not invent.",
+            },
+            {
+                "role": "user",
+                "content": f"""
+Goal:
+{goal}
+
+Memory:
+{memory_text}
+
+Observations:
+{observation_text}
+""",
+            },
+        ]
+
+        response = chat(model=self.model_name, messages=messages)
+        content = response["message"]["content"]
+
+        if isinstance(content, dict):
+            if "answer" in content and isinstance(content["answer"], str):
+                return content["answer"]
+            return json.dumps(content)
+
+        return content
