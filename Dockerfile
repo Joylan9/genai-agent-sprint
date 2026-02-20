@@ -5,12 +5,17 @@ FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y build-essential
+# lighter dev toolset (avoid huge build-essential during heavy builds)
+RUN apt-get update && apt-get install -y \
+    gcc \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 
 RUN pip install --upgrade pip
-RUN pip install --prefix=/install -r requirements.txt
+# prefer binary wheels, avoid pip cache, install into /install for multi-stage copy
+RUN pip install --no-cache-dir --prefer-binary --prefix=/install -r requirements.txt
 
 
 # ============================
@@ -20,7 +25,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy installed dependencies
+# Copy installed dependencies from builder stage
 COPY --from=builder /install /usr/local
 
 # Copy project files
