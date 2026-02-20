@@ -122,9 +122,6 @@ async def get_trace(
     return trace
 
 
-# ============================================================
-# AGENT ENDPOINT
-# ============================================================
 @app.post("/agent/run", response_model=AgentResponse)
 async def run_agent(
     request: AgentRequest,

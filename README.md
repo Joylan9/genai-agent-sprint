@@ -1,11 +1,120 @@
-# GenAI & Agentic AI — Enterprise AI Agent Engine
+<p align="center">
+  <h1 align="center"> Enterprise AI Agent Engine</h1>
+  <p align="center">
+    <strong>Production-ready, modular AI agent backend with planning, tool routing, RAG, memory, caching, guardrails, and observability.</strong>
+  </p>
+  <p align="center">
+    <img src="https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white" alt="Python" />
+    <img src="https://img.shields.io/badge/FastAPI-0.110+-green?logo=fastapi&logoColor=white" alt="FastAPI" />
+    <img src="https://img.shields.io/badge/Ollama-LLaMA3-orange?logo=meta&logoColor=white" alt="Ollama" />
+    <img src="https://img.shields.io/badge/MongoDB-6.0-47A248?logo=mongodb&logoColor=white" alt="MongoDB" />
+    <img src="https://img.shields.io/badge/Redis-7.0-DC382D?logo=redis&logoColor=white" alt="Redis" />
+    <img src="https://img.shields.io/badge/Celery-5.x-37814A?logo=celery&logoColor=white" alt="Celery" />
+    <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker" />
+  </p>
+</p>
 
-## Project Overview
+---
 
-**Project Name:** `genai-agent-sprint`  
-**Status:** Active — API server running (`uvicorn api.app:app --reload`)
+## 📖 Table of Contents
 
-An **enterprise-grade, production-ready AI Agent Backend** built from scratch. It is **not** a simple chatbot — it's a modular AI system with planning, tool execution, memory, caching, security guardrails, observability, and reliability layers.
+- [Overview](#overview)
+- [Key Features](#key-features)
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+- [Running the Application](#running-the-application)
+  - [Enterprise Local Runbook](#-enterprise-local-runbook)
+- [API Reference](#api-reference)
+- [How It Works](#how-it-works)
+- [Use Cases](#use-cases)
+- [Deployment](#deployment)
+- [License](#license)
+
+---
+
+## Overview
+
+The **Enterprise AI Agent Engine** is a production-grade, modular AI backend system that goes far beyond a simple chatbot. It accepts a user goal, generates an intelligent multi-step execution plan using a local LLM (Ollama + LLaMA3), routes each step to the appropriate tool (RAG search, web search, etc.), executes them with enterprise reliability patterns, and synthesizes a final response — all with full observability, caching, memory, and security guardrails.
+
+This project demonstrates real-world AI system engineering: the kind of architecture used internally at companies building AI-powered products at scale.
+
+---
+
+## Key Features
+
+| Category | Feature |
+|---|---|
+| 🤖 **AI Planning** | LLM-powered multi-step plan generation with auto-repair for malformed JSON |
+| 🔀 **Intelligent Routing** | Semantic similarity-based tool selection with configurable thresholds |
+| 🔍 **RAG Pipeline** | Retrieval-Augmented Generation with local embeddings and vector search |
+| 🌐 **Web Search** | Integrated web search tool for real-time information retrieval |
+| 💾 **Response Caching** | Smart cache layer (MongoDB-backed) to avoid redundant LLM calls |
+| 🧠 **Memory System** | Session-aware short-term + semantic long-term memory for context continuity |
+| 🛡️ **Security Guardrails** | Input validation, prompt injection detection, tool whitelist enforcement, output sanitization |
+| ⚡ **Reliability** | Retry policies, timeout executors, concurrent tool execution with semaphores |
+| 📊 **Observability** | Structured logging, Prometheus metrics, full execution traces stored in MongoDB |
+| 🔑 **API Key Auth** | Header-based API key authentication on protected endpoints |
+| 🐳 **Docker Ready** | Multi-stage Dockerfile with Gunicorn + Uvicorn workers |
+| 📦 **Async Workers** | Celery + Redis for background task processing |
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Client (curl / Postman / Frontend)          │
+└────────────────────────────────┬────────────────────────────────────┘
+                                 │  HTTP (JSON)
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                      FastAPI  (api/app.py)                         │
+│  ┌──────────┐  ┌───────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │ /health  │  │ /metrics  │  │ /agent/run   │  │ /traces/{id} │  │
+│  └──────────┘  └───────────┘  └──────┬───────┘  └──────────────┘  │
+│                                      │                             │
+│           API Key Auth  ·  Input Validation  ·  Rate Limiting      │
+└──────────────────────────────────────┬─────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│              PlanningAgentService  (app/services/)                  │
+│                                                                     │
+│   1. Guardrails → validate input                                    │
+│   2. LLM (Ollama) → generate execution plan (JSON)                 │
+│   3. Parse + auto-repair plan                                       │
+│   4. Guardrails → validate plan (tool whitelist, step limits)       │
+│   5. Cache check → return cached response if hit                    │
+│   6. IntelligentRouter → execute each step via tools                │
+│   7. Guardrails → sanitize tool outputs                             │
+│   8. Memory → retrieve session context                              │
+│   9. LLM (Ollama) → synthesize final answer                        │
+│  10. Guardrails → validate final answer                             │
+│  11. Cache + Memory → persist results                               │
+│  12. Trace → store full execution trace in MongoDB                  │
+└─────────┬───────────────────────────────────┬───────────────────────┘
+          │                                   │
+          ▼                                   ▼
+┌──────────────────┐              ┌────────────────────┐
+│  Tool Registry   │              │   Memory Manager   │
+│  ┌────────────┐  │              │  ┌──────────────┐  │
+│  │ RAG Search │  │              │  │  Short-term  │  │
+│  │ Web Search │  │              │  │  Long-term   │  │
+│  └────────────┘  │              │  │  (Semantic)  │  │
+└──────────────────┘              │  └──────────────┘  │
+                                  └────────────────────┘
+          │                                   │
+          ▼                                   ▼
+┌──────────────────┐              ┌────────────────────┐
+│   Redis (Broker) │              │  MongoDB (Storage)  │
+│   Celery Worker  │              │  Traces · Cache     │
+└──────────────────┘              │  Memory · Vectors   │
+                                  └────────────────────┘
+```
 
 ---
 
@@ -14,351 +123,399 @@ An **enterprise-grade, production-ready AI Agent Backend** built from scratch. I
 | Layer | Technology |
 |---|---|
 | **Language** | Python 3.11 |
-| **API Framework** | FastAPI + Uvicorn |
-| **LLM** | Ollama (LLaMA3 8B Instruct, local) |
-| **Embeddings** | HuggingFace `sentence-transformers` via `transformers` |
-| **Vector Search** | Custom vector store (NumPy cosine similarity) |
-| **Database** | MongoDB (async via `motor`) |
-| **Web Search** | SerpAPI (Google) |
-| **Metrics** | Prometheus (`prometheus_client`) |
+| **Web Framework** | FastAPI (ASGI) |
+| **LLM Runtime** | Ollama (local) with LLaMA3 8B Instruct |
+| **Embeddings** | Sentence-Transformers (local) |
+| **Database** | MongoDB 6.0 |
+| **Message Broker** | Redis 7.0 |
+| **Task Queue** | Celery 5.x |
 | **Containerization** | Docker (multi-stage build) |
-| **Config** | `python-dotenv` + `.env` file |
+| **ASGI Server** | Uvicorn (dev) / Gunicorn + Uvicorn (prod) |
+| **Metrics** | Prometheus client |
+| **Validation** | Pydantic v2 |
 
 ---
 
-## Architecture Diagram
-
-```mermaid
-graph TD
-    subgraph API Layer
-        A["FastAPI App (api/app.py)"]
-        B["Schemas (api/schemas.py)"]
-        C["Dependencies (api/dependencies.py)"]
-    end
-
-    subgraph Agent Core
-        D["PlanningAgentService"]
-        E["IntelligentRouter"]
-        F["ToolRegistry"]
-    end
-
-    subgraph Tools
-        G["RAGSearchTool"]
-        H["WebSearchTool"]
-    end
-
-    subgraph Services
-        I["EmbeddingService"]
-        J["RetrieverService"]
-        K["LLMService"]
-        L["MemoryService"]
-    end
-
-    subgraph Memory Layer
-        M["MemoryManager"]
-        N["ShortTermMemory"]
-        O["LongTermMemory"]
-        P["MongoDB"]
-    end
-
-    subgraph Infrastructure
-        Q["RetryPolicy"]
-        R["TimeoutExecutor"]
-        S["ReliableExecutor"]
-        T["StructuredLogger"]
-        U["InputValidator"]
-    end
-
-    subgraph Security
-        V["Guardrails"]
-        W["PolicyEngine"]
-    end
-
-    subgraph Reliability
-        X["CircuitBreaker"]
-    end
-
-    subgraph Caching
-        Y["ResponseCache (L1 + L2)"]
-    end
-
-    subgraph Observability
-        Z["Prometheus Metrics"]
-        AA["Health Check"]
-        AB["Readiness Probe"]
-    end
-
-    A --> C --> D
-    D --> E --> S --> G & H
-    E --> F --> G & H
-    G --> I & J
-    D --> M --> N & O --> P
-    D --> Y --> P
-    D --> V
-    A --> U
-    A --> Z & AA & AB
-```
-
----
-
-## What Has Been Built (Feature Breakdown)
-
-### ✅ 1. FastAPI REST API
-- **POST `/agent/run`** — Main agent endpoint (accepts goal, returns AI response)
-- **GET `/health`** — Liveness check
-- **GET `/ready`** — Database readiness probe
-- **GET `/metrics`** — Prometheus metrics endpoint
-- **GET `/traces/{request_id}`** — Trace debugging endpoint
-- API key authentication via `X-API-Key` header
-- Request size limiting middleware (413 protection)
-- Pydantic-validated request/response schemas
-
-### ✅ 2. Planning Agent (Core Brain)
-- LLM-powered plan generation using Ollama/LLaMA3
-- JSON plan parsing with retry logic (up to 2 retries)
-- Multi-step plan execution with parallel step support
-- Final answer synthesis from observations + memory context
-- Memory-aware responses (uses conversation history)
-
-### ✅ 3. Intelligent Router
-- Tool resolution from registry
-- Primary execution via `ReliableExecutor`
-- **Failure-based fallback:** auto-falls back to `web_search` if primary tool errors
-- **Confidence-based fallback:** if RAG similarity score < threshold (0.50), auto-falls back to web search
-- Full structured logging at every decision point
-
-### ✅ 4. Tool System
-- **`BaseTool`** abstract interface (`tools.py`)
-- **`RAGSearchTool`** — Vector similarity search over local documents
-- **`WebSearchTool`** — Live Google search via SerpAPI
-- **`ToolRegistry`** — Dynamic tool registration and lookup
-
-### ✅ 5. RAG Pipeline (Retrieval-Augmented Generation)
-- Text chunking from `data/sample.txt`
-- Embedding generation via `sentence-transformers`
-- Persistent vector store (`data/vector_store.pkl`)
-- Cosine similarity search with confidence scores
-- Top-K retrieval with score metadata
-
-### ✅ 6. Enterprise Memory System
-- **`MemoryManager`** — Coordinates short-term + long-term memory
-- **`ShortTermMemory`** — Recent conversation messages (MongoDB)
-- **`LongTermMemory`** — Semantic memory with embedding-based retrieval (MongoDB)
-- **`MongoDB`** — Singleton async client with index initialization
-- Session-based memory isolation
-
-### ✅ 7. Smart Response Cache (L1 + L2)
-- **L1:** In-memory process-level cache with TTL
-- **L2:** MongoDB-backed persistent cache with auto-expiry indexes
-- SHA-256 hash-based cache keys (goal-level + plan-level)
-- Cache hit/miss tracking
-
-### ✅ 8. Security & Guardrails
-- **Prompt Injection Detection** — 13 regex patterns (e.g., "ignore previous instructions")
-- **Plan Validation** — Max steps, tool whitelist, query length limits
-- **Tool Output Sanitization** — Blocks malicious patterns (e.g., "exfiltrate", "system override")
-- **Memory Poisoning Protection** — Detects "from now on..." style attacks
-- **Final Answer Leak Detection** — Blocks API keys, passwords, secrets leakage
-- **Input Validator** — Schema-based validation (length, type, sanitization)
-
-### ✅ 9. Reliability Layer
-- **`RetryPolicy`** — Exponential backoff retry (configurable retries, delay, factor)
-- **`TimeoutExecutor`** — Async timeout enforcement (10s default)
-- **`ReliableExecutor`** — Combines retry + timeout into one wrapper
-- **`CircuitBreaker`** — State machine (CLOSED → OPEN → HALF_OPEN) with failure threshold, recovery timeout, and execution timeout
-
-### ✅ 10. Observability
-- **Prometheus Metrics** — Request count, cache hits, active requests, planner/tool/synthesis latency histograms
-- **Health Endpoint** — Checks MongoDB + Ollama connectivity
-- **Readiness Probe** — MongoDB ping check (K8s-ready)
-- **Trace Storage** — Full execution traces stored in MongoDB (steps, observations, latencies)
-- **Trace Evaluation Script** — Analyzes traces for tool usage stats, success rates, p95 latencies
-
-### ✅ 11. Docker Deployment
-- Multi-stage Dockerfile (builder + runtime)
-- Production server: Gunicorn + Uvicorn workers (3 workers)
-- `.dockerignore` configured
-- Port 8000 exposed
-
-### ✅ 12. CLI Entrypoints
-- `app/main.py` — Interactive CLI with RAG + memory (early version)
-- `app/planning_agent_main.py` — Enterprise CLI with full planning + routing
-
-### ✅ 13. Learning Documentation
-- 8 PDF revision notes covering Days 1–12 of the learning sprint (in `assets/`)
-
----
-
-## Folder Structure (Complete)
+## Project Structure
 
 ```
 genai-agent-sprint/
 │
-├── .env                          # Environment variables (API keys, MongoDB URI, model config)
-├── .gitignore                    # Git ignore rules
-├── .dockerignore                 # Docker ignore rules
-├── Dockerfile                    # Multi-stage Docker build (Python 3.11-slim)
-├── requirements.txt              # Python dependencies
-├── README.md                     # Project README
-│
-├── api/                          # ── FastAPI REST Layer ──
-│   ├── __init__.py
-│   ├── app.py                    # FastAPI app, endpoints, middleware, API key auth
-│   ├── dependencies.py           # Dependency injection (wires all components together)
+├── api/                          # API layer (FastAPI)
+│   ├── app.py                    # FastAPI entrypoint, middleware, routes
+│   ├── dependencies.py           # Agent assembly & dependency injection
 │   └── schemas.py                # Pydantic request/response models
 │
-├── app/                          # ── Core Application ──
-│   ├── __init__.py
-│   ├── main.py                   # CLI entrypoint (basic RAG + memory loop)
-│   ├── agent.py                  # Agent module
-│   ├── agent_main.py             # Simple agent runner
-│   ├── planning_agent_main.py    # Enterprise CLI entrypoint (planning + routing)
-│   ├── rag.py                    # RAG module
-│   ├── llm_test.py               # LLM testing script
-│   ├── utils.py                  # Utility functions
+├── app/                          # Core application logic
+│   ├── services/                 # Business logic services
+│   │   ├── planning_agent_service.py   # Main planning agent (plan → execute → synthesize)
+│   │   ├── embedding_service.py        # Text embedding generation
+│   │   └── retriever_service.py        # Vector similarity retrieval
 │   │
-│   ├── config/                   # ── Configuration ──
-│   │   └── settings.py           # Central settings (env-based: model, thresholds, timeouts)
+│   ├── tools/                    # Agent tools
+│   │   ├── rag_search_tool.py    # RAG-based document search
+│   │   └── web_search_tool.py    # Web search integration
 │   │
-│   ├── core/                     # ── Core Components ──
-│   │   ├── __init__.py
-│   │   └── vector_store.py       # Vector store (chunking, embedding, persistence)
+│   ├── routing/                  # Intelligent tool routing
+│   │   └── intelligent_router.py # Semantic similarity-based routing
 │   │
-│   ├── services/                 # ── Business Logic Services ──
-│   │   ├── __init__.py
-│   │   ├── planning_agent_service.py  # Planning agent (plan → execute → synthesize) [522 lines]
-│   │   ├── agent_service.py      # Basic agent service
-│   │   ├── embedding_service.py  # Sentence-transformer embedding generation
-│   │   ├── retriever_service.py  # Vector retrieval service
-│   │   ├── llm_service.py        # Ollama LLM wrapper
-│   │   └── memory_service.py     # In-memory conversation memory
+│   ├── registry/                 # Tool registration system
+│   │   └── tool_registry.py      # Central tool registry
 │   │
-│   ├── tools/                    # ── Agent Tools ──
-│   │   ├── __init__.py
-│   │   ├── tools.py              # BaseTool abstract interface
-│   │   ├── rag_search_tool.py    # RAG vector search tool (cosine similarity)
-│   │   └── web_search_tool.py    # Web search tool (SerpAPI / Google)
+│   ├── memory/                   # Memory management
+│   │   ├── memory_manager.py     # Short-term + long-term memory
+│   │   └── database.py           # MongoDB connection & indexes
 │   │
-│   ├── routing/                  # ── Intelligent Router ──
-│   │   ├── __init__.py
-│   │   └── intelligent_router.py # Execution routing with fallback logic
+│   ├── cache/                    # Caching layer
+│   │   └── response_cache.py     # Smart response caching
 │   │
-│   ├── registry/                 # ── Tool Registry ──
-│   │   ├── __init__.py
-│   │   └── tool_registry.py      # Dynamic tool registration and lookup
+│   ├── security/                 # Security & guardrails
+│   │   └── guardrails.py         # Input/output validation, injection detection
 │   │
-│   ├── memory/                   # ── Enterprise Memory System ──
-│   │   ├── models.py             # Memory data models
-│   │   ├── database.py           # MongoDB singleton (async motor client + indexes)
-│   │   ├── memory_manager.py     # Unified memory coordinator
-│   │   ├── short_term_memory.py  # Recent conversation messages (MongoDB)
-│   │   └── long_term_memory.py   # Semantic long-term memory (MongoDB + embeddings)
-│   │
-│   ├── cache/                    # ── Response Caching ──
-│   │   └── response_cache.py     # L1 in-memory + L2 MongoDB cache with TTL
-│   │
-│   ├── infra/                    # ── Infrastructure Layer ──
-│   │   ├── __init__.py
-│   │   ├── logger.py             # Structured JSON logger + Prometheus metrics export
-│   │   ├── retry_policy.py       # Exponential backoff retry policy
-│   │   ├── timeout_executor.py   # Async timeout enforcement
+│   ├── infra/                    # Infrastructure utilities
+│   │   ├── logger.py             # Structured logging + Prometheus metrics
+│   │   ├── retry_policy.py       # Configurable retry with backoff
+│   │   ├── timeout_executor.py   # Execution timeout enforcement
 │   │   ├── reliable_executor.py  # Combined retry + timeout executor
-│   │   └── validators.py         # Input validation (sanitization, length, type checks)
+│   │   ├── validators.py         # Input sanitization
+│   │   └── celery_app.py         # Celery application config
 │   │
-│   ├── security/                 # ── Security & Guardrails ──
-│   │   ├── guardrails.py         # Adversarial guardrails (injection, poisoning, leakage)
-│   │   ├── input_validator.py    # Schema-based input validation
-│   │   └── policy_engine.py      # Security policy enforcement
+│   ├── core/                     # Core components
+│   │   └── vector_store.py       # Vector store for embeddings
 │   │
-│   ├── reliability/              # ── Reliability Patterns ──
-│   │   └── circuit_breaker.py    # Async circuit breaker (CLOSED/OPEN/HALF_OPEN)
-│   │
-│   ├── observability/            # ── Monitoring & Health ──
-│   │   ├── metrics.py            # Prometheus counters, histograms, gauges
-│   │   ├── health.py             # Health check endpoint (MongoDB + Ollama)
-│   │   └── readiness.py          # Readiness probe (database ping)
-│   │
-│   ├── entrypoints/              # ── Additional entrypoints (empty) ──
-│   │
-│   └── archive/                  # ── Archived / Earlier versions ──
-│       ├── embedding_test.py     # Early embedding test
-│       ├── rag_basic.py          # Basic RAG implementation (v1)
-│       └── rag_persistent.py     # Persistent RAG implementation (v2)
+│   ├── observability/            # Monitoring & tracing
+│   └── reliability/              # Reliability patterns
 │
-├── data/                         # ── Data Files ──
-│   ├── sample.txt                # Source document for RAG
-│   └── vector_store.pkl          # Persisted vector embeddings
+├── data/                         # Data files
+│   └── sample.txt                # Sample document for RAG
 │
-├── scripts/                      # ── Utility Scripts ──
-│   └── evaluate_traces.py        # Trace evaluation report (latency, tool usage, success rates)
-│
-└── assets/                       # ── Learning Resources ──
-    ├── GenAI_Day1_Detailed_Revision.pdf
-    ├── Day2_RAG_Detailed_Revision.pdf
-    ├── Day3_Modular_Architecture_Detailed_Revision.pdf
-    ├── Day4_Memory_Layer_Detailed_Revision.pdf
-    ├── Day5_Agentic_AI_Foundations_Detailed_Revision.pdf
-    ├── Day6_Enterprise_Hybrid_RAG_Revision.pdf
-    ├── Day7_Day12_Enterprise_Agent_Notes.pdf
-    └── Day8_Enterprise_Memory_System_Revision.pdf
+├── scripts/                      # Utility scripts
+├── Dockerfile                    # Multi-stage production Docker build
+├── requirements.txt              # Python dependencies
+├── .env                          # Environment variables
+└── .gitignore
 ```
 
 ---
 
-## File Count Summary
+## Getting Started
 
-| Category | Files |
+### Prerequisites
+
+| Requirement | Purpose |
 |---|---|
-| API Layer | 4 |
-| Services | 6 |
-| Tools | 4 |
-| Memory | 5 |
-| Infrastructure | 6 |
-| Security | 3 |
-| Reliability | 1 |
-| Observability | 3 |
-| Routing | 2 |
-| Registry | 2 |
-| Cache | 1 |
-| Config | 1 |
-| Scripts | 1 |
-| Data | 2 |
-| Root configs | 6 |
-| Archive | 3 |
-| Assets (PDFs) | 8 |
-| **Total** | **~58 files** |
+| **Python 3.11+** | Runtime |
+| **WSL 2 (Ubuntu)** | Linux environment on Windows |
+| **Docker Desktop** | Running MongoDB & Redis containers |
+| **Ollama** | Local LLM inference server |
 
----
+### Installation
 
-## How It Runs
+**1. Clone the repository**
 
 ```bash
-# Development
-uvicorn api.app:app --reload
+git clone <your-repo-url>
+cd genai-agent-sprint
+```
 
-# Production (Docker)
-docker build -t genai-agent .
-docker run -p 8000:8000 genai-agent
+**2. Create and activate virtual environment (WSL)**
 
-# Example API call
-curl -X POST http://localhost:8000/agent/run \
-  -H "X-API-Key: supersecretkey" \
-  -H "Content-Type: application/json" \
-  -d '{"session_id": "demo-123", "goal": "What is RAG in AI?"}'
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+**3. Install dependencies**
+
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+**4. Pull the LLM model**
+
+```bash
+ollama pull llama3:8b-instruct-q4_K_M
+```
+
+**5. Configure environment**
+
+Create a `.env` file in the project root (or edit the existing one):
+
+```env
+MONGO_URI=mongodb://localhost:27017
+MONGO_DB_NAME=agent_db
+REDIS_URL=redis://localhost:6379/0
+API_KEY=supersecretkey
 ```
 
 ---
 
-## Key Design Patterns Used
+## Running the Application
 
-| Pattern | Where |
+### 🚀 Enterprise Local Runbook
+
+Your backend consists of **separate processes** that mirror production architecture:
+
+| Process | Role | Terminal |
+|---|---|---|
+| **MongoDB** | Database (traces, cache, memory) | Docker |
+| **Redis** | Message broker for Celery | Docker |
+| **FastAPI** | HTTP API server | Terminal 1 |
+| **Celery Worker** | Async task processing | Terminal 2 |
+
+---
+
+#### Step 1 — Start Infrastructure (Docker)
+
+Open **WSL terminal** and start MongoDB & Redis (one-time after reboot):
+
+```bash
+# Check if already running
+docker ps
+
+# Start if not running
+docker run -d --name mongo -p 27017:27017 mongo:6
+docker run -d --name redis -p 6379:6379 redis:7
+```
+
+**✅ Verify:** `docker ps` should show both `mongo` and `redis` containers.
+
+---
+
+#### Step 2 — Start FastAPI Server (Terminal 1)
+
+Open a **new WSL terminal**:
+
+```bash
+cd "/mnt/d/GenAI and AgenticAI/genai-agent-sprint"
+source .venv/bin/activate
+
+uvicorn api.app:app \
+  --host 0.0.0.0 \
+  --port 8000 \
+  --reload
+```
+
+**✅ Expected output:**
+
+```
+✅ MongoDB connected and indexes ensured.
+Application startup complete
+Uvicorn running on http://0.0.0.0:8000
+```
+
+> ⚠️ Keep this terminal running.
+
+---
+
+#### Step 3 — Start Celery Worker (Terminal 2)
+
+Open **another WSL terminal**:
+
+```bash
+cd "/mnt/d/GenAI and AgenticAI/genai-agent-sprint"
+source .venv/bin/activate
+
+python -m celery \
+  -A app.infra.celery_app worker \
+  --loglevel=info \
+  --concurrency=2
+```
+
+**✅ Expected output:**
+
+```
+Connected to redis://localhost:6379/0
+celery@... ready.
+```
+
+> ⚠️ Keep this terminal running. Celery is **required** for full agent functionality.
+
+---
+
+#### Step 4 — Verify System Health
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+**✅ Expected:**
+
+```json
+{"status": "ok"}
+```
+
+---
+
+#### Step 5 — Test the Agent
+
+```bash
+curl -X POST http://127.0.0.1:8000/agent/run \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: supersecretkey" \
+  -d '{"session_id":"test-user","goal":"Explain RAG simply"}'
+```
+
+---
+
+### Quick Reference (Copy-Paste)
+
+```bash
+# === TERMINAL 0: Infrastructure ===
+docker start mongo redis    # if containers exist but stopped
+
+# === TERMINAL 1: FastAPI ===
+cd "/mnt/d/GenAI and AgenticAI/genai-agent-sprint"
+source .venv/bin/activate
+uvicorn api.app:app --host 0.0.0.0 --port 8000 --reload
+
+# === TERMINAL 2: Celery Worker ===
+cd "/mnt/d/GenAI and AgenticAI/genai-agent-sprint"
+source .venv/bin/activate
+python -m celery -A app.infra.celery_app worker --loglevel=info --concurrency=2
+```
+
+---
+
+## API Reference
+
+### `GET /health`
+
+Health check endpoint (no auth required).
+
+```json
+{"status": "ok"}
+```
+
+### `GET /ready`
+
+Database readiness probe.
+
+```json
+{"status": "ready"}
+```
+
+### `GET /metrics`
+
+Prometheus-compatible metrics endpoint.
+
+### `POST /agent/run`
+
+Execute an AI agent task.
+
+**Headers:**
+
+| Header | Value |
 |---|---|
-| **Dependency Injection** | `api/dependencies.py` wires all components |
-| **Registry Pattern** | `ToolRegistry` for dynamic tool management |
-| **Strategy Pattern** | Tools implement `BaseTool.execute()` interface |
-| **Circuit Breaker** | `reliability/circuit_breaker.py` |
-| **Retry with Backoff** | `infra/retry_policy.py` |
-| **Singleton** | `MongoDB` connection class |
-| **L1/L2 Caching** | `ResponseCache` (memory + MongoDB) |
-| **Middleware** | Request size limiting |
-| **Router/Fallback** | `IntelligentRouter` with confidence-based fallback |
+| `Content-Type` | `application/json` |
+| `x-api-key` | Your API key |
+
+**Request Body:**
+
+```json
+{
+  "session_id": "unique-session-id",
+  "goal": "Your question or task for the AI agent"
+}
+```
+
+**Response:**
+
+```json
+{
+  "result": "The agent's synthesized response",
+  "request_id": "uuid-trace-id"
+}
+```
+
+### `GET /traces/{request_id}`
+
+Retrieve full execution trace for debugging (auth required).
+
+---
+
+## How It Works
+
+```
+User Goal → Input Guardrails → LLM Plan Generation → Plan Validation
+    → Cache Check (hit? return cached) → Tool Execution (parallel)
+    → Output Sanitization → Memory Retrieval → LLM Synthesis
+    → Final Answer Guardrails → Cache + Memory Store → Response
+```
+
+1. **Input Validation** — The user's goal is checked for prompt injection and sanitized.
+2. **Plan Generation** — The LLM creates a structured JSON plan with tool calls.
+3. **Plan Validation** — Guardrails enforce tool whitelists and step limits.
+4. **Cache Lookup** — If an identical request was previously processed, the cached result is returned instantly.
+5. **Parallel Tool Execution** — Steps are executed concurrently (up to 4 at a time) via the intelligent router.
+6. **Output Sanitization** — Each tool's output is scanned for sensitive data leakage.
+7. **Context Retrieval** — Session memory and semantically relevant past interactions are fetched.
+8. **Answer Synthesis** — The LLM combines observations + memory into a final response.
+9. **Post-Validation** — The final answer is checked for data leakage before being returned.
+10. **Persistence** — Results are cached, memory is updated, and a full trace is stored.
+
+---
+
+## Use Cases
+
+- **Enterprise Knowledge Assistant** — Query internal documents with RAG-powered search
+- **Research Agent** — Combine web search + document retrieval for comprehensive answers
+- **Customer Support Backend** — Session-aware, context-rich AI responses
+- **AI Workflow Automation** — Multi-step task planning and execution
+- **Interview Portfolio Project** — Demonstrates production AI system design skills
+
+---
+
+## Deployment
+
+### Docker (Production)
+
+```bash
+docker build -t ai-agent-engine .
+docker run -p 8000:8000 \
+  -e MONGO_URI=mongodb://mongo:27017 \
+  -e REDIS_URL=redis://redis:6379/0 \
+  -e API_KEY=your-production-key \
+  ai-agent-engine
+```
+
+The Dockerfile uses a **multi-stage build** with Gunicorn + Uvicorn workers for production performance.
+
+### Production Architecture
+
+```
+nginx (reverse proxy)
+  └── Gunicorn + Uvicorn workers (FastAPI)
+  └── Celery worker pool
+  └── MongoDB (database)
+  └── Redis (broker)
+  └── Ollama (LLM server)
+```
+
+---
+
+## Enterprise Design Highlights
+
+| Concern | Implementation |
+|---|---|
+| **Separation of concerns** | API layer / services / tools / infra cleanly separated |
+| **Dependency injection** | `build_agent()` wires all components at startup |
+| **Reliability** | Retry with exponential backoff + timeout enforcement |
+| **Security** | API key auth, input sanitization, prompt injection detection, output scanning |
+| **Observability** | Structured logs, Prometheus metrics, full execution traces |
+| **Performance** | Response caching, parallel tool execution, async I/O |
+| **Memory** | Hybrid short-term (recent) + long-term (semantic) memory |
+| **Scalability** | Celery workers, Docker-ready, stateless API design |
+
+---
+
+## License
+
+This project is for educational and portfolio purposes.
+
+---
+
+<p align="center">
+  <sub>Built with ❤️ as part of the GenAI & Agentic AI System Builder Sprint</sub>
+</p>

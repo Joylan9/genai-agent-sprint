@@ -75,46 +75,32 @@ class PlanningAgentService:
             self.registry.list_tools() if self.registry else []
         )
 
-        # Stronger planner system prompt that requires at least one step
         messages = [
             {
                 "role": "system",
                 "content": f"""
-You are an autonomous planning agent.
+You are a planning agent.
 
-You ONLY have access to the following tools (exact names):
+You ONLY have access to:
 {available_tools}
 
-Your job:
-- Break the user's goal into an ordered list of actionable steps.
-- Each step must be a JSON object with keys: "tool" and "query".
-- You MUST return at least one step. An empty "steps" list is NOT allowed.
-- Use only tool names from the list above. Do not invent tool names.
-- Do NOT include any explanations, markdown, or text outside the JSON.
-- Output MUST be valid JSON and follow the exact schema below.
-
-Return ONLY valid JSON with this structure:
+Return ONLY valid JSON:
 
 {{
   "steps": [
-    {{"tool": "<tool_name>", "query": "<query>"}},
-    ...
+    {{"tool": "<tool_name>", "query": "<query>"}}
   ]
 }}
 
-Example (must follow schema):
-{{
-  "steps": [
-    {{"tool": "rag_search", "query": "find summary about X"}},
-    {{"tool": "web_search", "query": "recent news about X"}}
-  ]
-}}
+Rules:
+- Use only listed tool names
+- No markdown
+- No explanations
 """
             },
             {"role": "user", "content": goal},
         ]
 
-        # Initial planner call (deterministic)
         response = chat(
             model=self.model_name,
             messages=messages,
@@ -134,105 +120,7 @@ Example (must follow schema):
             except Exception:
                 pass
 
-        # --- Ensure non-empty plan by attempting to parse and repair if needed ---
-        # Try to parse and ensure 'steps' non-empty. If parsing fails or steps empty,
-        # attempt a JSON-only repair with the model, then fallback to a safe plan.
-        try:
-            steps = self.parse_plan_json(plan_text)
-            if not steps:
-                raise ValueError("Planner returned empty 'steps'.")
-            # if we have valid non-empty steps, return original text
-            return plan_text
-        except Exception as first_err:
-            # log the initial parsing/emptiness issue
-            if self.logger:
-                try:
-                    self.logger.log("planner_parse_issue", {"error": str(first_err), "raw": plan_text[:2000]})
-                except Exception:
-                    pass
-
-            # Attempt automated JSON-only repair using the model
-            try:
-                repair_messages = [
-                    {"role": "system", "content": "Fix JSON only. Ensure the JSON follows the schema and contains at least one step. Do not add commentary."},
-                    {"role": "user", "content": plan_text},
-                ]
-
-                repair_response = chat(
-                    model=self.model_name,
-                    messages=repair_messages,
-                    format="json",
-                    options={"temperature": 0},
-                )
-
-                repair_content = repair_response["message"]["content"]
-                if isinstance(repair_content, dict):
-                    repaired_text = json.dumps(repair_content)
-                else:
-                    repaired_text = repair_content
-
-                if self.logger:
-                    try:
-                        self.logger.log("planner_repair_output", {"raw": repaired_text[:2000]})
-                    except Exception:
-                        pass
-
-                # attempt parse repaired text
-                try:
-                    repaired_steps = self.parse_plan_json(repaired_text)
-                    if repaired_steps:
-                        return repaired_text
-                    # fallthrough to fallback if empty
-                except Exception as repair_err:
-                    if self.logger:
-                        try:
-                            self.logger.log("planner_repair_failed", {"error": str(repair_err), "raw": repaired_text[:2000]})
-                        except Exception:
-                            pass
-                    # continue to fallback
-            except Exception as repair_call_err:
-                if self.logger:
-                    try:
-                        self.logger.log("planner_repair_call_failed", {"error": str(repair_call_err)})
-                    except Exception:
-                        pass
-
-            # Final fallback: construct a safe single-step plan using first allowed tool or 'rag_search'
-            try:
-                fallback_tool = "rag_search"
-                try:
-                    allowed = self.registry.list_tools() if self.registry else []
-                    if allowed and isinstance(allowed, list) and len(allowed) > 0:
-                        # prefer a retrieval/search style tool if present, else first
-                        # choose rag_search if it's available
-                        if "rag_search" in allowed:
-                            fallback_tool = "rag_search"
-                        elif "web_search" in allowed:
-                            fallback_tool = "web_search"
-                        else:
-                            fallback_tool = allowed[0]
-                except Exception:
-                    # keep default
-                    pass
-
-                fallback_plan = {"steps": [{"tool": fallback_tool, "query": goal}]}
-                fallback_text = json.dumps(fallback_plan)
-
-                if self.logger:
-                    try:
-                        self.logger.log("planner_fallback_applied", {"fallback": fallback_plan})
-                    except Exception:
-                        pass
-
-                return fallback_text
-            except Exception as final_err:
-                # as a last resort raise original parsing error
-                if self.logger:
-                    try:
-                        self.logger.log("planner_fallback_failed", {"error": str(final_err)})
-                    except Exception:
-                        pass
-                raise first_err
+        return plan_text
 
     # ============================================================
     # JSON PARSING
