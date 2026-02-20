@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GenAI & Agentic AI — Enterprise AI Agent Engine | Project Brief</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            color: #1a1a2e;
+            background: #ffffff;
+            line-height: 1.7;
+            font-size: 14px;
+        }
+
+        @media print {
+            body { font-size: 11px; line-height: 1.5; }
+            .page-break { page-break-before: always; }
+            .no-print { display: none !important; }
+            .container { max-width: 100%; padding: 0; }
+            h1 { font-size: 22px; }
+            h2 { font-size: 16px; }
+            h3 { font-size: 13px; }
+            table { font-size: 10px; }
+            pre { font-size: 9px; }
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 30px;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            padding: 40px 0 30px;
+            border-bottom: 3px solid #6c5ce7;
+            margin-bottom: 40px;
+        }
+        .header h1 {
+            font-size: 28px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+        @media print {
+            .header h1 { color: #6c5ce7; -webkit-text-fill-color: #6c5ce7; }
+        }
+        .header .subtitle {
+            font-size: 15px;
+            color: #636e72;
+            font-weight: 400;
+        }
+        .header .badge {
+            display: inline-block;
+            background: #00b894;
+            color: white;
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-top: 12px;
+        }
+
+        /* Print Button */
+        .print-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 50px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 8px 25px rgba(108, 92, 231, 0.4);
+            transition: transform 0.2s;
+            z-index: 1000;
+        }
+        .print-btn:hover { transform: scale(1.05); }
+
+        /* Sections */
+        h2 {
+            font-size: 20px;
+            font-weight: 700;
+            color: #6c5ce7;
+            margin: 35px 0 15px;
+            padding-bottom: 6px;
+            border-bottom: 2px solid #dfe6e9;
+        }
+        h3 {
+            font-size: 15px;
+            font-weight: 600;
+            color: #2d3436;
+            margin: 20px 0 8px;
+        }
+        p {
+            margin-bottom: 12px;
+            color: #2d3436;
+        }
+        strong { font-weight: 600; }
+        code {
+            background: #f1f2f6;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Fira Code', 'Consolas', monospace;
+            font-size: 12px;
+            color: #d63031;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-size: 13px;
+        }
+        th {
+            background: #6c5ce7;
+            color: white;
+            padding: 10px 14px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        td {
+            padding: 9px 14px;
+            border-bottom: 1px solid #eee;
+        }
+        tr:nth-child(even) { background: #fafafa; }
+        tr:hover { background: #f0efff; }
+
+        /* Lists */
+        ul {
+            margin: 8px 0 12px 20px;
+        }
+        li {
+            margin-bottom: 4px;
+            color: #2d3436;
+        }
+
+        /* Code blocks / folder structure */
+        pre {
+            background: #2d3436;
+            color: #dfe6e9;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Fira Code', 'Consolas', monospace;
+            font-size: 11.5px;
+            line-height: 1.6;
+            margin: 15px 0;
+        }
+
+        /* Feature cards */
+        .feature-section {
+            background: #fafafe;
+            border: 1px solid #eee;
+            border-left: 4px solid #6c5ce7;
+            border-radius: 6px;
+            padding: 15px 18px;
+            margin: 12px 0;
+        }
+        .feature-section h3 {
+            margin-top: 0;
+            color: #6c5ce7;
+        }
+
+        /* Divider */
+        hr {
+            border: none;
+            height: 1px;
+            background: #dfe6e9;
+            margin: 30px 0;
+        }
+
+        .overview-box {
+            background: linear-gradient(135deg, #f8f7ff, #f0efff);
+            border: 1px solid #d5ccff;
+            border-radius: 10px;
+            padding: 20px 24px;
+            margin: 15px 0;
+        }
+
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        @media (max-width: 600px) { .two-col { grid-template-columns: 1fr; } }
+        @media print { .two-col { grid-template-columns: 1fr 1fr; } }
+    </style>
+</head>
+<body>
+
+<button class="print-btn no-print" onclick="window.print()">📄 Save as PDF</button>
+
+<div class="container">
+
+    <!-- HEADER -->
+    <div class="header">
+        <h1>GenAI & Agentic AI — Enterprise AI Agent Engine</h1>
+        <div class="subtitle">Complete Project Brief & Architecture Documentation</div>
+        <div class="badge">✅ STATUS: ACTIVE</div>
+    </div>
+
+    <!-- OVERVIEW -->
+    <h2>📋 Project Overview</h2>
+    <div class="overview-box">
+        <p><strong>Project Name:</strong> <code>genai-agent-sprint</code></p>
+        <p>An <strong>enterprise-grade, production-ready AI Agent Backend</strong> built from scratch. It is <strong>not</strong> a simple chatbot — it's a modular AI system with planning, tool execution, memory, caching, security guardrails, observability, and reliability layers.</p>
+    </div>
+
+    <!-- TECH STACK -->
+    <h2>🛠️ Tech Stack</h2>
+    <table>
+        <thead><tr><th>Layer</th><th>Technology</th></tr></thead>
+        <tbody>
+            <tr><td><strong>Language</strong></td><td>Python 3.11</td></tr>
+            <tr><td><strong>API Framework</strong></td><td>FastAPI + Uvicorn</td></tr>
+            <tr><td><strong>LLM</strong></td><td>Ollama (LLaMA3 8B Instruct, local)</td></tr>
+            <tr><td><strong>Embeddings</strong></td><td>HuggingFace sentence-transformers</td></tr>
+            <tr><td><strong>Vector Search</strong></td><td>Custom vector store (NumPy cosine similarity)</td></tr>
+            <tr><td><strong>Database</strong></td><td>MongoDB (async via motor)</td></tr>
+            <tr><td><strong>Web Search</strong></td><td>SerpAPI (Google)</td></tr>
+            <tr><td><strong>Metrics</strong></td><td>Prometheus (prometheus_client)</td></tr>
+            <tr><td><strong>Containerization</strong></td><td>Docker (multi-stage build)</td></tr>
+            <tr><td><strong>Config</strong></td><td>python-dotenv + .env file</td></tr>
+        </tbody>
+    </table>
+
+    <hr>
+
+    <!-- FEATURES -->
+    <h2>🚀 What Has Been Built (13 Feature Areas)</h2>
+
+    <div class="feature-section">
+        <h3>✅ 1. FastAPI REST API</h3>
+        <ul>
+            <li><strong>POST <code>/agent/run</code></strong> — Main agent endpoint (accepts goal, returns AI response)</li>
+            <li><strong>GET <code>/health</code></strong> — Liveness check</li>
+            <li><strong>GET <code>/ready</code></strong> — Database readiness probe</li>
+            <li><strong>GET <code>/metrics</code></strong> — Prometheus metrics endpoint</li>
+            <li><strong>GET <code>/traces/{request_id}</code></strong> — Trace debugging endpoint</li>
+            <li>API key authentication via <code>X-API-Key</code> header</li>
+            <li>Request size limiting middleware (413 protection)</li>
+            <li>Pydantic-validated request/response schemas</li>
+        </ul>
+    </div>
+
+    <div class="feature-section">
+        <h3>✅ 2. Planning Agent (Core Brain)</h3>
+        <ul>
+            <li>LLM-powered plan generation using Ollama/LLaMA3</li>
+            <li>JSON plan parsing with retry logic (up to 2 retries)</li>
+            <li>Multi-step plan execution with parallel step support</li>
+            <li>Final answer synthesis from observations + memory context</li>
+            <li>Memory-aware responses (uses conversation history)</li>
+        </ul>
+    </div>
+
+    <div class="feature-section">
+        <h3>✅ 3. Intelligent Router</h3>
+        <ul>
+            <li>Tool resolution from registry</li>
+            <li>Primary execution via <code>ReliableExecutor</code></li>
+            <li><strong>Failure-based fallback:</strong> auto-falls back to web_search if primary tool errors</li>
+            <li><strong>Confidence-based fallback:</strong> if RAG similarity &lt; 0.50, falls back to web search</li>
+            <li>Full structured logging at every decision point</li>
+        </ul>
+    </div>
+
+    <div class="feature-section">
+        <h3>✅ 4. Tool System</h3>
+        <ul>
+            <li><code>BaseTool</code> abstract interface</li>
+            <li><code>RAGSearchTool</code> — Vector similarity search over local documents</li>
+            <li><code>WebSearchTool</code> — Live Google search via SerpAPI</li>
+            <li><code>ToolRegistry</code> — Dynamic tool registration and lookup</li>
+        </ul>
+    </div>
+
+    <div class="feature-section">
+        <h3>✅ 5. RAG Pipeline (Retrieval-Augmented Generation)</h3>
+        <ul>
+            <li>Text chunking from <code>data/sample.txt</code></li>
+            <li>Embedding generation via sentence-transformers</li>
+            <li>Persistent vector store (<code>data/vector_store.pkl</code>)</li>
+            <li>Cosine similarity search with confidence scores</li>
+            <li>Top-K retrieval with score metadata</li>
+        </ul>
+    </div>
+
+    <div class="feature-section">
+        <h3>✅ 6. Enterprise Memory System</h3>
+        <ul>
+            <li><code>MemoryManager</code> — Coordinates short-term + long-term memory</li>
+            <li><code>ShortTermMemory</code> — Recent conversation messages (MongoDB)</li>
+            <li><code>LongTermMemory</code> — Semantic memory with embedding retrieval (MongoDB)</li>
+            <li><code>MongoDB</code> — Singleton async client with index initialization</li>
+            <li>Session-based memory isolation</li>
+        </ul>
+    </div>
+
+    <div class="feature-section">
+        <h3>✅ 7. Smart Response Cache (L1 + L2)</h3>
+        <ul>
+            <li><strong>L1:</strong> In-memory process-level cache with TTL</li>
+            <li><strong>L2:</strong> MongoDB-backed persistent cache with auto-expiry indexes</li>
+            <li>SHA-256 hash-based cache keys (goal-level + plan-level)</li>
+            <li>Cache hit/miss tracking</li>
+        </ul>
+    </div>
+
+    <div class="page-break"></div>
+
+    <div class="feature-section">
+        <h3>✅ 8. Security & Guardrails</h3>
+        <ul>
+            <li><strong>Prompt Injection Detection</strong> — 13 regex patterns</li>
+            <li><strong>Plan Validation</strong> — Max steps, tool whitelist, query length limits</li>
+            <li><strong>Tool Output Sanitization</strong> — Blocks malicious patterns</li>
+            <li><strong>Memory Poisoning Protection</strong> — Detects override attempts</li>
+            <li><strong>Final Answer Leak Detection</strong> — Blocks API keys, passwords, secrets</li>
+            <li><strong>Input Validator</strong> — Schema-based validation</li>
+        </ul>
+    </div>
+
+    <div class="feature-section">
+        <h3>✅ 9. Reliability Layer</h3>
+        <ul>
+            <li><code>RetryPolicy</code> — Exponential backoff retry</li>
+            <li><code>TimeoutExecutor</code> — Async timeout enforcement (10s default)</li>
+            <li><code>ReliableExecutor</code> — Combined retry + timeout wrapper</li>
+            <li><code>CircuitBreaker</code> — CLOSED → OPEN → HALF_OPEN state machine</li>
+        </ul>
+    </div>
+
+    <div class="feature-section">
+        <h3>✅ 10. Observability</h3>
+        <ul>
+            <li>Prometheus Metrics — Request count, cache hits, latency histograms</li>
+            <li>Health Endpoint — MongoDB + Ollama connectivity</li>
+            <li>Readiness Probe — K8s-ready database ping</li>
+            <li>Trace Storage — Full execution traces in MongoDB</li>
+            <li>Trace Evaluation Script — Tool stats, success rates, p95 latencies</li>
+        </ul>
+    </div>
+
+    <div class="feature-section">
+        <h3>✅ 11. Docker Deployment</h3>
+        <ul>
+            <li>Multi-stage Dockerfile (builder + runtime)</li>
+            <li>Production server: Gunicorn + Uvicorn workers (3 workers)</li>
+            <li>.dockerignore configured, Port 8000 exposed</li>
+        </ul>
+    </div>
+
+    <div class="feature-section">
+        <h3>✅ 12. CLI Entrypoints</h3>
+        <ul>
+            <li><code>app/main.py</code> — Interactive CLI with RAG + memory</li>
+            <li><code>app/planning_agent_main.py</code> — Enterprise CLI with planning + routing</li>
+        </ul>
+    </div>
+
+    <div class="feature-section">
+        <h3>✅ 13. Learning Documentation</h3>
+        <ul>
+            <li>8 PDF revision notes covering Days 1–12 of the sprint (in <code>assets/</code>)</li>
+        </ul>
+    </div>
+
+    <hr>
+    <div class="page-break"></div>
+
+    <!-- FOLDER STRUCTURE -->
+    <h2>📁 Folder Structure (Complete)</h2>
+    <pre>genai-agent-sprint/
+│
+├── .env                          # Environment variables (API keys, MongoDB URI)
+├── .gitignore                    # Git ignore rules
+├── .dockerignore                 # Docker ignore rules
+├── Dockerfile                    # Multi-stage Docker build (Python 3.11-slim)
+├── requirements.txt              # Python dependencies
+├── README.md                     # Project README
+│
+├── api/                          # ── FastAPI REST Layer ──
+│   ├── __init__.py
+│   ├── app.py                    # FastAPI app, endpoints, middleware, API key auth
+│   ├── dependencies.py           # Dependency injection (wires all components)
+│   └── schemas.py                # Pydantic request/response models
+│
+├── app/                          # ── Core Application ──
+│   ├── __init__.py
+│   ├── main.py                   # CLI entrypoint (basic RAG + memory loop)
+│   ├── agent.py                  # Agent module
+│   ├── agent_main.py             # Simple agent runner
+│   ├── planning_agent_main.py    # Enterprise CLI (planning + routing)
+│   ├── rag.py                    # RAG module
+│   ├── llm_test.py               # LLM testing script
+│   ├── utils.py                  # Utility functions
+│   │
+│   ├── config/                   # ── Configuration ──
+│   │   └── settings.py           # Central settings (env-based)
+│   │
+│   ├── core/                     # ── Core Components ──
+│   │   ├── __init__.py
+│   │   └── vector_store.py       # Vector store (chunk, embed, persist)
+│   │
+│   ├── services/                 # ── Business Logic Services ──
+│   │   ├── __init__.py
+│   │   ├── planning_agent_service.py  # Planning agent [522 lines]
+│   │   ├── agent_service.py      # Basic agent service
+│   │   ├── embedding_service.py  # Sentence-transformer embeddings
+│   │   ├── retriever_service.py  # Vector retrieval service
+│   │   ├── llm_service.py        # Ollama LLM wrapper
+│   │   └── memory_service.py     # In-memory conversation memory
+│   │
+│   ├── tools/                    # ── Agent Tools ──
+│   │   ├── __init__.py
+│   │   ├── tools.py              # BaseTool abstract interface
+│   │   ├── rag_search_tool.py    # RAG vector search (cosine similarity)
+│   │   └── web_search_tool.py    # Web search (SerpAPI / Google)
+│   │
+│   ├── routing/                  # ── Intelligent Router ──
+│   │   ├── __init__.py
+│   │   └── intelligent_router.py # Execution routing with fallback
+│   │
+│   ├── registry/                 # ── Tool Registry ──
+│   │   ├── __init__.py
+│   │   └── tool_registry.py      # Dynamic tool registration
+│   │
+│   ├── memory/                   # ── Enterprise Memory System ──
+│   │   ├── models.py             # Memory data models
+│   │   ├── database.py           # MongoDB singleton (async motor)
+│   │   ├── memory_manager.py     # Unified memory coordinator
+│   │   ├── short_term_memory.py  # Recent messages (MongoDB)
+│   │   └── long_term_memory.py   # Semantic long-term memory
+│   │
+│   ├── cache/                    # ── Response Caching ──
+│   │   └── response_cache.py     # L1 memory + L2 MongoDB with TTL
+│   │
+│   ├── infra/                    # ── Infrastructure Layer ──
+│   │   ├── __init__.py
+│   │   ├── logger.py             # Structured logger + Prometheus export
+│   │   ├── retry_policy.py       # Exponential backoff retry
+│   │   ├── timeout_executor.py   # Async timeout enforcement
+│   │   ├── reliable_executor.py  # Combined retry + timeout
+│   │   └── validators.py         # Input validation
+│   │
+│   ├── security/                 # ── Security & Guardrails ──
+│   │   ├── guardrails.py         # Adversarial guardrails
+│   │   ├── input_validator.py    # Schema-based validation
+│   │   └── policy_engine.py      # Security policy enforcement
+│   │
+│   ├── reliability/              # ── Reliability Patterns ──
+│   │   └── circuit_breaker.py    # Async circuit breaker
+│   │
+│   ├── observability/            # ── Monitoring & Health ──
+│   │   ├── metrics.py            # Prometheus metrics
+│   │   ├── health.py             # Health check endpoint
+│   │   └── readiness.py          # Readiness probe
+│   │
+│   ├── entrypoints/              # ── Additional entrypoints ──
+│   │
+│   └── archive/                  # ── Archived versions ──
+│       ├── embedding_test.py
+│       ├── rag_basic.py
+│       └── rag_persistent.py
+│
+├── data/                         # ── Data Files ──
+│   ├── sample.txt                # Source document for RAG
+│   └── vector_store.pkl          # Persisted vector embeddings
+│
+├── scripts/                      # ── Utility Scripts ──
+│   └── evaluate_traces.py        # Trace evaluation report
+│
+└── assets/                       # ── Learning Resources (8 PDFs) ──
+    ├── GenAI_Day1_Detailed_Revision.pdf
+    ├── Day2_RAG_Detailed_Revision.pdf
+    ├── Day3_Modular_Architecture_Detailed_Revision.pdf
+    ├── Day4_Memory_Layer_Detailed_Revision.pdf
+    ├── Day5_Agentic_AI_Foundations_Detailed_Revision.pdf
+    ├── Day6_Enterprise_Hybrid_RAG_Revision.pdf
+    ├── Day7_Day12_Enterprise_Agent_Notes.pdf
+    └── Day8_Enterprise_Memory_System_Revision.pdf</pre>
+
+    <hr>
+
+    <!-- FILE COUNT -->
+    <h2>📊 File Count Summary</h2>
+    <div class="two-col">
+        <table>
+            <thead><tr><th>Category</th><th>Files</th></tr></thead>
+            <tbody>
+                <tr><td>API Layer</td><td>4</td></tr>
+                <tr><td>Services</td><td>6</td></tr>
+                <tr><td>Tools</td><td>4</td></tr>
+                <tr><td>Memory</td><td>5</td></tr>
+                <tr><td>Infrastructure</td><td>6</td></tr>
+                <tr><td>Security</td><td>3</td></tr>
+                <tr><td>Reliability</td><td>1</td></tr>
+                <tr><td>Observability</td><td>3</td></tr>
+                <tr><td>Routing</td><td>2</td></tr>
+            </tbody>
+        </table>
+        <table>
+            <thead><tr><th>Category</th><th>Files</th></tr></thead>
+            <tbody>
+                <tr><td>Registry</td><td>2</td></tr>
+                <tr><td>Cache</td><td>1</td></tr>
+                <tr><td>Config</td><td>1</td></tr>
+                <tr><td>Scripts</td><td>1</td></tr>
+                <tr><td>Data</td><td>2</td></tr>
+                <tr><td>Root configs</td><td>6</td></tr>
+                <tr><td>Archive</td><td>3</td></tr>
+                <tr><td>Assets (PDFs)</td><td>8</td></tr>
+                <tr><td><strong>Total</strong></td><td><strong>~58</strong></td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <hr>
+
+    <!-- HOW TO RUN -->
+    <h2>▶️ How It Runs</h2>
+    <pre># Development
+uvicorn api.app:app --reload
+
+# Production (Docker)
+docker build -t genai-agent .
+docker run -p 8000:8000 genai-agent
+
+# Example API call
+curl -X POST http://localhost:8000/agent/run \
+  -H "X-API-Key: supersecretkey" \
+  -H "Content-Type: application/json" \
+  -d '{"session_id": "demo-123", "goal": "What is RAG in AI?"}'</pre>
+
+    <hr>
+
+    <!-- DESIGN PATTERNS -->
+    <h2>🧩 Key Design Patterns Used</h2>
+    <table>
+        <thead><tr><th>Pattern</th><th>Where</th></tr></thead>
+        <tbody>
+            <tr><td><strong>Dependency Injection</strong></td><td>api/dependencies.py wires all components</td></tr>
+            <tr><td><strong>Registry Pattern</strong></td><td>ToolRegistry for dynamic tool management</td></tr>
+            <tr><td><strong>Strategy Pattern</strong></td><td>Tools implement BaseTool.execute() interface</td></tr>
+            <tr><td><strong>Circuit Breaker</strong></td><td>reliability/circuit_breaker.py</td></tr>
+            <tr><td><strong>Retry with Backoff</strong></td><td>infra/retry_policy.py</td></tr>
+            <tr><td><strong>Singleton</strong></td><td>MongoDB connection class</td></tr>
+            <tr><td><strong>L1/L2 Caching</strong></td><td>ResponseCache (memory + MongoDB)</td></tr>
+            <tr><td><strong>Middleware</strong></td><td>Request size limiting</td></tr>
+            <tr><td><strong>Router/Fallback</strong></td><td>IntelligentRouter with confidence-based fallback</td></tr>
+        </tbody>
+    </table>
+
+    <hr>
+    <p style="text-align: center; color: #b2bec3; font-size: 12px; margin-top: 30px;">
+        Generated on February 20, 2026 — GenAI & Agentic AI | Enterprise AI Agent Engine
+    </p>
+
+</div>
+</body>
+</html>
