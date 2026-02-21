@@ -53,5 +53,5 @@ USER appuser
 
 EXPOSE 8000
 
-# NOTE: use the correct module path for your FastAPI app (api.app:app)
-CMD ["gunicorn", "api.app:app", "-k", "uvicorn.workers.UvicornWorker", "--workers", "3", "--timeout", "90", "--graceful-timeout", "30", "--keep-alive", "5", "--bind", "0.0.0.0:8000"]
+# Default CMD (overridden by docker-compose command:)
+CMD ["gunicorn", "app.api_app:app", "-k", "uvicorn.workers.UvicornWorker", "--workers", "1", "--timeout", "120", "--graceful-timeout", "30", "--keep-alive", "5", "--bind", "0.0.0.0:8000"]

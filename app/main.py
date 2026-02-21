@@ -1,8 +1,8 @@
-from services.embedding_service import EmbeddingService
-from core.vector_store import VectorStore
-from services.retriever_service import RetrieverService
-from services.llm_service import LLMService
-from services.memory_service import MemoryService
+from app.services.embedding_service import EmbeddingService
+from app.core.vector_store import VectorStore
+from app.services.retriever_service import RetrieverService
+from app.services.llm_service import LLMService
+from app.services.memory_service import MemoryService
 
 
 DATA_PATH = "data/sample.txt"

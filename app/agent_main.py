@@ -1,5 +1,5 @@
-from services.agent_service import AgentService
-from services.tools import SimpleSearchTool
+from app.services.agent_service import AgentService
+from app.services.tools import SimpleSearchTool
 
 
 def main():
