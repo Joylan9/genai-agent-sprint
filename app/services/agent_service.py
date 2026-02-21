@@ -1,9 +1,10 @@
-from ollama import chat
+from ..infra.ollama_client import get_ollama_client, get_ollama_model, llm_chat
 
 
 class AgentService:
-    def __init__(self, model_name="llama3", tool=None):
-        self.model_name = model_name
+    def __init__(self, model_name=None, tool=None):
+        self.model_name = model_name or get_ollama_model()
+        self.client = get_ollama_client()
         self.tool = tool
 
     def run(self, goal, max_iterations=5):
@@ -32,9 +33,11 @@ Do not say anything else.
 
         for _ in range(max_iterations):
 
-            response = chat(
+            response = llm_chat(
+                self.client,
                 model=self.model_name,
-                messages=messages
+                messages=messages,
+                options={"num_ctx": 4096}
             )
 
             output = response["message"]["content"]

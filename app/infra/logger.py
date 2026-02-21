@@ -43,6 +43,27 @@ MEMORY_MISS_COUNTER = Counter(
     ["memory_type"]
 )
 
+# ============================================================
+# LLM OBSERVABILITY METRICS
+# ============================================================
+
+LLM_CALL_COUNTER = Counter(
+    "llm_calls_total",
+    "Total LLM inference calls",
+    ["status"]
+)
+
+LLM_CALL_LATENCY = Histogram(
+    "llm_call_latency_seconds",
+    "LLM inference latency per call",
+    buckets=(0.5, 1, 2, 5, 10, 15, 20, 30)
+)
+
+LLM_FAILURE_COUNTER = Counter(
+    "llm_failures_total",
+    "LLM transport/timeout failures",
+    ["error_type"]
+)
 
 def metrics_response():
     return generate_latest(), CONTENT_TYPE_LATEST

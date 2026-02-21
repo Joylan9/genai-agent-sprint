@@ -31,8 +31,27 @@ COPY --from=builder /install /usr/local
 # Copy project files
 COPY . .
 
+# Keep Python behavior predictable
+ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+
+# Set application-owned cache locations (transformers/hf use these)
+# We set HOME and multiple cache envs so HF/transformers/sentence-transformers will use /app/.cache
+ENV HOME=/app \
+    XDG_CACHE_HOME=/app/.cache \
+    HF_HOME=/app/.cache \
+    TRANSFORMERS_CACHE=/app/.cache \
+    HF_DATASETS_CACHE=/app/.cache
+
+# Create cache dirs and a non-root user, ensure ownership (must run as root)
+RUN mkdir -p /app/.cache/huggingface /app/.cache/hub \
+    && groupadd -r appuser && useradd -r -g appuser appuser \
+    && chown -R appuser:appuser /app
+
+# Switch to non-root user (enterprise practice)
+USER appuser
 
 EXPOSE 8000
 
-CMD ["gunicorn", "app.main:app", "-k", "uvicorn.workers.UvicornWorker", "--workers", "3", "--timeout", "90", "--graceful-timeout", "30", "--keep-alive", "5", "--bind", "0.0.0.0:8000"]
+# NOTE: use the correct module path for your FastAPI app (api.app:app)
+CMD ["gunicorn", "api.app:app", "-k", "uvicorn.workers.UvicornWorker", "--workers", "3", "--timeout", "90", "--graceful-timeout", "30", "--keep-alive", "5", "--bind", "0.0.0.0:8000"]

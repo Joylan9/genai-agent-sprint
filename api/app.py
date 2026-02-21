@@ -4,6 +4,11 @@ FastAPI entrypoint for the Enterprise AI Agent Engine.
 """
 
 import os
+from dotenv import load_dotenv
+
+# Load .env into environment as early as possible
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException, Header, Depends, Request, Response
 from fastapi.responses import JSONResponse
 from api.schemas import AgentRequest, AgentResponse
@@ -11,6 +16,8 @@ from api.dependencies import build_agent
 from app.infra.validators import InputValidator
 from app.memory.database import MongoDB
 from app.infra.logger import metrics_response
+from app.infra.ollama_client import get_ollama_client, get_ollama_model
+import redis
 
 app = FastAPI(
     title="Enterprise AI Agent Engine",
@@ -20,18 +27,54 @@ app = FastAPI(
 
 # ============================================================
 # MONGODB STARTUP INITIALIZATION
+# Build agent after DB + env are ready (so env/HF_TOKEN is loaded)
 # ============================================================
+agent = None  # will be set in startup_event
+
 @app.on_event("startup")
 async def startup_event():
-    MongoDB.connect()
-    await MongoDB.initialize_indexes()
-    print("✅ MongoDB connected and indexes ensured.")
+    global agent
+
+    # ---------- Dependency Gate 1: MongoDB ----------
+    try:
+        MongoDB.connect()
+        await MongoDB.initialize_indexes()
+        db = MongoDB.get_database()
+        await db.command("ping")
+        print("✅ MongoDB connected and indexes ensured.")
+    except Exception as e:
+        print(f"❌ MongoDB startup check FAILED: {e}")
+        raise RuntimeError(f"MongoDB not available: {e}") from e
+
+    # ---------- Dependency Gate 2: Ollama ----------
+    try:
+        client = get_ollama_client()
+        models = client.list()
+        model_names = [m.model for m in models.models]
+        expected_model = get_ollama_model()
+        print(f"✅ Ollama connected. Models: {model_names}")
+        if expected_model not in model_names:
+            print(f"⚠️  Expected model '{expected_model}' not found in {model_names}")
+    except Exception as e:
+        print(f"❌ Ollama startup check FAILED: {e}")
+        raise RuntimeError(f"Ollama not available: {e}") from e
+
+    # ---------- Dependency Gate 3: Redis (Celery broker) ----------
+    try:
+        redis_url = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
+        r = redis.from_url(redis_url, socket_connect_timeout=5)
+        r.ping()
+        print("✅ Redis connected.")
+    except Exception as e:
+        # Redis is non-critical for core API — warn but don't block startup
+        print(f"⚠️  Redis not available (Celery may not work): {e}")
+
+    # Build agent once at startup after env and DB are ready
+    agent = build_agent()
+    print("✅ Agent built and ready.")
 
 
-# Build agent once at startup
-agent = build_agent()
-
-# Load API key from environment
+# Load API key from environment (now that load_dotenv ran)
 API_KEY = os.getenv("API_KEY", "supersecretkey")
 
 # Maximum allowed request size (currently 1KB for testing)
@@ -74,7 +117,10 @@ def verify_api_key(x_api_key: str = Header(None)):
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "model": get_ollama_model(),
+    }
 
 
 # ----------------------------
@@ -87,18 +133,42 @@ async def metrics():
 
 
 # ----------------------------
-# Readiness endpoint (DB)
+# Readiness endpoint (deep check)
 # ----------------------------
 @app.get("/ready")
 async def readiness():
+    checks = {}
+
+    # MongoDB
     try:
         await MongoDB.get_database().command("ping")
-        return {"status": "ready"}
+        checks["mongodb"] = "ready"
     except Exception:
-        return Response(
-            content="Database not ready",
-            status_code=503
-        )
+        checks["mongodb"] = "unavailable"
+
+    # Ollama
+    try:
+        get_ollama_client().list()
+        checks["ollama"] = "ready"
+    except Exception:
+        checks["ollama"] = "unavailable"
+
+    # Redis
+    try:
+        redis_url = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
+        r = redis.from_url(redis_url, socket_connect_timeout=3)
+        r.ping()
+        checks["redis"] = "ready"
+    except Exception:
+        checks["redis"] = "unavailable"
+
+    all_ready = all(v == "ready" for v in checks.values())
+    status_code = 200 if all_ready else 503
+
+    return JSONResponse(
+        content={"status": "ready" if all_ready else "degraded", "checks": checks},
+        status_code=status_code,
+    )
 
 
 # ----------------------------

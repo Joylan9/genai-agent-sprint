@@ -1,5 +1,1 @@
-Artificial Intelligence is the field of building machines that can perform tasks requiring human intelligence.
-
-Machine Learning is a subset of AI that allows systems to learn from data.
-
-Embeddings are numerical representations of text that capture semantic meaning.
+This is a small sample document used by the vector store.

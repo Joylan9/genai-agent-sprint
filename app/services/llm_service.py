@@ -1,9 +1,10 @@
-from ollama import chat
+from ..infra.ollama_client import get_ollama_client, get_ollama_model, llm_chat
 
 
 class LLMService:
-    def __init__(self, model_name="llama3"):
-        self.model_name = model_name
+    def __init__(self, model_name=None):
+        self.model_name = model_name or get_ollama_model()
+        self.client = get_ollama_client()
 
     def generate(self, query, contexts, memory_history):
         combined_context = "\n".join(contexts)
@@ -19,9 +20,11 @@ Context:
         messages.extend(memory_history)
         messages.append({"role": "user", "content": query})
 
-        response = chat(
+        response = llm_chat(
+            self.client,
             model=self.model_name,
-            messages=messages
+            messages=messages,
+            options={"num_ctx": 4096}
         )
 
         return response["message"]["content"]

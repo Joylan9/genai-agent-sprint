@@ -4,7 +4,8 @@ Enterprise planning agent service with Smart Response Caching.
 """
 
 from typing import Optional, List, Dict, Any
-from ollama import chat
+import os
+import requests
 import json
 import re
 import time
@@ -19,6 +20,7 @@ from ..infra.logger import (
     REQUEST_COUNTER,
     REQUEST_LATENCY,
 )
+from ..infra.ollama_client import get_ollama_client, get_ollama_model, llm_chat, get_llm_semaphore
 from ..registry.tool_registry import ToolRegistry
 from ..routing.intelligent_router import IntelligentRouter
 from ..memory.memory_manager import MemoryManager
@@ -32,14 +34,15 @@ from ..security.guardrails import Guardrails
 class PlanningAgentService:
     def __init__(
         self,
-        model_name: str = "llama3:8b-instruct-q4_K_M",
+        model_name: str = None,
         tool_registry: Optional[ToolRegistry] = None,
         router: Optional[IntelligentRouter] = None,
         logger: Optional[StructuredLogger] = None,
         max_json_retries: int = 2,
         memory_manager: Optional[MemoryManager] = None,
     ):
-        self.model_name = model_name
+        self.model_name = model_name or get_ollama_model()
+        self.client = get_ollama_client()
         self.registry = tool_registry
         self.router = router
         self.logger = logger
@@ -101,11 +104,12 @@ Rules:
             {"role": "user", "content": goal},
         ]
 
-        response = chat(
+        response = llm_chat(
+            self.client,
             model=self.model_name,
             messages=messages,
             format="json",
-            options={"temperature": 0},
+            options={"temperature": 0, "num_ctx": 4096},
         )
 
         content = response["message"]["content"]
@@ -166,14 +170,15 @@ Rules:
                 if attempt >= self.max_json_retries:
                     raise ValueError(f"Plan parsing failed: {e}")
 
-                repair_response = chat(
+                repair_response = llm_chat(
+                    self.client,
                     model=self.model_name,
                     messages=[
                         {"role": "system", "content": "Fix JSON only."},
                         {"role": "user", "content": current_text},
                     ],
                     format="json",
-                    options={"temperature": 0},
+                    options={"temperature": 0, "num_ctx": 4096},
                 )
 
                 repair_content = repair_response["message"]["content"]
@@ -510,7 +515,13 @@ Observations:
             },
         ]
 
-        response = chat(model=self.model_name, messages=messages)
+        response = llm_chat(
+            self.client,
+            model=self.model_name,
+            messages=messages,
+            options={"num_ctx": 4096}
+        )
+
         content = response["message"]["content"]
 
         if isinstance(content, dict):

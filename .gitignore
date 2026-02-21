@@ -9,3 +9,11 @@ __pycache__/
 data/vector_store.pkl
 
 NUL
+
+# Accidentally created files
+--name
+-e
+-p
+nano.env
+genai-agent*latest
+*.env
