@@ -27,8 +27,9 @@ from ..memory.memory_manager import MemoryManager
 from ..memory.database import MongoDB
 from ..cache.response_cache import ResponseCache
 
-# ---------- New import: Guardrails ----------
+# ---------- New import: Guardrails & PolicyEngine ----------
 from ..security.guardrails import Guardrails
+from ..security.policy_engine import PolicyEngine, PolicyViolationError
 
 
 class PlanningAgentService:
@@ -64,12 +65,13 @@ class PlanningAgentService:
             allowed_tools = []
 
         self.guardrails = Guardrails(allowed_tools=allowed_tools)
+        self.policy = PolicyEngine(allowed_tools=allowed_tools)
 
     # ============================================================
     # PLAN CREATION
     # ============================================================
 
-    def create_plan(self, goal: str) -> str:
+    async def create_plan(self, goal: str) -> str:
         # ---------- Validate input BEFORE planner ----------
         # Hard-block on injection attempts or invalid input
         self.guardrails.validate_user_input(goal)
@@ -104,7 +106,7 @@ Rules:
             {"role": "user", "content": goal},
         ]
 
-        response = llm_chat(
+        response = await llm_chat(
             self.client,
             model=self.model_name,
             messages=messages,
@@ -130,7 +132,7 @@ Rules:
     # JSON PARSING
     # ============================================================
 
-    def parse_plan_json(self, plan_text: str) -> List[Dict[str, Any]]:
+    async def parse_plan_json(self, plan_text: str) -> List[Dict[str, Any]]:
         def extract_json(text: str):
             match = re.search(r"\{.*?\}", text, re.DOTALL)
             return match.group(0) if match else None
@@ -170,7 +172,7 @@ Rules:
                 if attempt >= self.max_json_retries:
                     raise ValueError(f"Plan parsing failed: {e}")
 
-                repair_response = llm_chat(
+                repair_response = await llm_chat(
                     self.client,
                     model=self.model_name,
                     messages=[
@@ -205,12 +207,13 @@ Rules:
         # PLAN PARSE
         # ----------------------------
         planner_start = time.time()
-        steps = self.parse_plan_json(plan_text)
+        steps = await self.parse_plan_json(plan_text)
         planner_latency = time.time() - planner_start
 
         # ---------- Guardrail: validate parsed plan ----------
         # Hard-block if plan fails rules (tool whitelist, step limits, step structure)
         self.guardrails.validate_plan(steps)
+        self.policy.validate_plan(steps)
 
         # ============================================================
         # 🔥 ENTERPRISE CACHE CHECK (BEFORE TOOLS)
@@ -464,7 +467,7 @@ Rules:
     # SYNTHESIS (ADDED BACK)
     # ============================================================
 
-    def synthesize_answer(
+    async def synthesize_answer(
         self,
         goal: str,
         observations: List[Dict[str, Any]],
@@ -515,18 +518,20 @@ Observations:
             },
         ]
 
-        response = llm_chat(
+        response = await llm_chat(
             self.client,
             model=self.model_name,
             messages=messages,
             options={"num_ctx": 4096}
         )
 
-        content = response["message"]["content"]
+        final_answer = response["message"]["content"]
 
-        if isinstance(content, dict):
-            if "answer" in content and isinstance(content["answer"], str):
-                return content["answer"]
-            return json.dumps(content)
+        if isinstance(final_answer, dict):
+            if "answer" in final_answer and isinstance(final_answer["answer"], str):
+                final_answer = final_answer["answer"]
+            else:
+                final_answer = json.dumps(final_answer)
 
-        return content
+        # Apply Policy Engine Redaction
+        return self.policy.redact(final_answer)

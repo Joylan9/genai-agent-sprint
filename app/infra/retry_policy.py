@@ -1,10 +1,10 @@
-import time
+import asyncio
 import logging
 
 
 class RetryPolicy:
     """
-    Generic retry policy with exponential backoff.
+    Generic retry policy with exponential backoff for async operations.
     """
 
     def __init__(self, max_retries=2, base_delay=0.5, backoff_factor=2):
@@ -12,9 +12,9 @@ class RetryPolicy:
         self.base_delay = base_delay
         self.backoff_factor = backoff_factor
 
-    def execute(self, func, *args, **kwargs):
+    async def execute(self, func, *args, **kwargs):
         """
-        Executes a function with retry logic.
+        Executes a callable (sync or async) with retry logic.
         """
 
         attempt = 0
@@ -22,7 +22,14 @@ class RetryPolicy:
 
         while attempt <= self.max_retries:
             try:
-                return func(*args, **kwargs)
+                if asyncio.iscoroutinefunction(func):
+                    return await func(*args, **kwargs)
+                else:
+                    # Handle both sync and async functions correctly
+                    res = func(*args, **kwargs)
+                    if asyncio.iscoroutine(res):
+                        return await res
+                    return res
 
             except Exception as e:
                 if attempt >= self.max_retries:
@@ -33,6 +40,6 @@ class RetryPolicy:
                     f"Retrying in {delay}s..."
                 )
 
-                time.sleep(delay)
+                await asyncio.sleep(delay)
                 delay *= self.backoff_factor
                 attempt += 1

@@ -1,11 +1,14 @@
 # app/tools/web_search_tool.py
 
 import os
+import asyncio
 import requests
 from dotenv import load_dotenv
 from typing import Dict, Any
 
 from app.tools.tools import BaseTool
+
+from app.reliability.circuit_breaker import CircuitBreaker
 
 load_dotenv()
 
@@ -22,7 +25,15 @@ class WebSearchTool(BaseTool):
 
         self.base_url = "https://serpapi.com/search.json"
 
-    def search(self, query: str, num_results: int = 3):
+        # Circuit Breaker for SerpAPI
+        self._circuit = CircuitBreaker(
+            failure_threshold=3,
+            recovery_timeout=60,
+            execution_timeout=10,
+            name="serpapi"
+        )
+
+    async def search(self, query: str, num_results: int = 3):
 
         params = {
             "q": query,
@@ -31,7 +42,18 @@ class WebSearchTool(BaseTool):
             "num": num_results
         }
 
-        response = requests.get(self.base_url, params=params, timeout=10)
+        async def _do_search():
+            # requests.get is sync, wrap in to_thread
+            return await asyncio.to_thread(
+                requests.get, self.base_url, params=params, timeout=10
+            )
+
+        try:
+            response = await self._circuit.call(_do_search)
+        except asyncio.TimeoutError:
+            return "Search API error: request timed out"
+        except Exception as e:
+            return f"Search API error: {str(e)}"
 
         if response.status_code != 200:
             return f"Search API error: {response.status_code}"
@@ -51,7 +73,7 @@ class WebSearchTool(BaseTool):
 
         return "\n\n".join(results)
 
-    def execute(self, step: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute(self, step: Dict[str, Any]) -> Dict[str, Any]:
 
         raw_query = step.get("query")
 
@@ -65,12 +87,15 @@ class WebSearchTool(BaseTool):
         query: str = raw_query.strip()
 
         try:
-            result = self.search(query)
+            # search is now async
+            result = await self.search(query)
 
             return {
                 "status": "success",
                 "data": result,
-                "metadata": {}
+                "metadata": {
+                    "circuit_status": self._circuit.state
+                }
             }
 
         except Exception as e:

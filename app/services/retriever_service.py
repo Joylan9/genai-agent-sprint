@@ -11,7 +11,7 @@ class RetrieverService:
     def retrieve(self, query_embedding, top_k=2):
         similarities = [
             self._cosine_similarity(query_embedding, doc_embedding)
-            for doc_embedding in self.vector_store.embeddings
+            for doc_embedding in self.vector_store.document_embeddings
         ]
 
         top_indices = np.argsort(similarities)[-top_k:][::-1]

@@ -18,13 +18,13 @@ class ReliableExecutor:
         self.retry_policy = retry_policy
         self.timeout_executor = timeout_executor
 
-    def execute(self, tool, step):
+    async def execute(self, tool, step):
 
         tool_name = step.get("tool", "unknown")
         start_time = time.time()
 
         try:
-            result = self.retry_policy.execute(
+            result = await self.retry_policy.execute(
                 self.timeout_executor.execute,
                 tool.execute,
                 step

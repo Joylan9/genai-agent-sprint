@@ -204,7 +204,7 @@ async def run_agent(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-        plan = agent.create_plan(validated_goal)
+        plan = await agent.create_plan(validated_goal)
 
         execution_output = await agent.execute_plan(
             request.session_id,

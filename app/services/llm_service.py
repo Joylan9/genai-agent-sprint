@@ -6,7 +6,7 @@ class LLMService:
         self.model_name = model_name or get_ollama_model()
         self.client = get_ollama_client()
 
-    def generate(self, query, contexts, memory_history):
+    async def generate(self, query, contexts, memory_history):
         combined_context = "\n".join(contexts)
 
         system_prompt = f"""
@@ -20,7 +20,7 @@ Context:
         messages.extend(memory_history)
         messages.append({"role": "user", "content": query})
 
-        response = llm_chat(
+        response = await llm_chat(
             self.client,
             model=self.model_name,
             messages=messages,

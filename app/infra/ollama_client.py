@@ -24,11 +24,21 @@ from .logger import (
     StructuredLogger,
 )
 
+from ..reliability.circuit_breaker import CircuitBreaker
+
 _client = None
 _logger = logging.getLogger("ollama_client")
 
 # Concurrency guard: max 2 simultaneous LLM calls per worker
 _llm_semaphore = None
+
+# Circuit Breaker for LLM calls
+_llm_circuit = CircuitBreaker(
+    failure_threshold=4,
+    recovery_timeout=30,
+    execution_timeout=45,  # Slightly longer for inference
+    name="llm"
+)
 
 
 def get_ollama_client() -> Client:
@@ -56,20 +66,25 @@ def get_llm_semaphore() -> asyncio.Semaphore:
     return _llm_semaphore
 
 
-def llm_chat(client: Client, **kwargs) -> dict:
+async def llm_chat(client: Client, **kwargs) -> dict:
     """
-    Observable wrapper around client.chat().
+    Observable wrapper around client.chat() with Circuit Breaker protection.
 
     Automatically records:
       - inference latency (Prometheus histogram)
       - success/failure counts (Prometheus counters)
       - structured log entry with duration
     """
-    start = time.time()
     model = kwargs.get("model", "unknown")
 
+    async def _chat_call():
+        # ollama.Client.chat is sync, wrap in to_thread
+        return await asyncio.to_thread(client.chat, **kwargs)
+
+    start = time.time()
     try:
-        response = client.chat(**kwargs)
+        # Wrap the call in circuit breaker
+        response = await _llm_circuit.call(_chat_call)
         duration = time.time() - start
 
         # Prometheus metrics
@@ -83,14 +98,14 @@ def llm_chat(client: Client, **kwargs) -> dict:
 
         return response
 
-    except requests.exceptions.Timeout as e:
+    except asyncio.TimeoutError as e:
         duration = time.time() - start
         LLM_CALL_COUNTER.labels(status="error").inc()
         LLM_FAILURE_COUNTER.labels(error_type="timeout").inc()
         _logger.error(
             f"llm_call model={model} duration={duration:.2f}s status=timeout"
         )
-        raise RuntimeError("LLM request timed out") from e
+        raise RuntimeError("LLM request timed out (circuit breaker)") from e
 
     except requests.exceptions.ConnectionError as e:
         duration = time.time() - start
@@ -101,11 +116,12 @@ def llm_chat(client: Client, **kwargs) -> dict:
         )
         raise RuntimeError("LLM unavailable") from e
 
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
+        # Generic catch-all for circuit breaker rejects and other errors
         duration = time.time() - start
         LLM_CALL_COUNTER.labels(status="error").inc()
-        LLM_FAILURE_COUNTER.labels(error_type="request").inc()
+        LLM_FAILURE_COUNTER.labels(error_type="general").inc()
         _logger.error(
             f"llm_call model={model} duration={duration:.2f}s status=error error={e}"
         )
-        raise RuntimeError("LLM unavailable") from e
+        raise e

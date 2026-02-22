@@ -16,10 +16,9 @@ class VectorStore:
 
         self._initialize_store()
 
-    # ------------------------------------------------
-    # File hash (used to detect content change)
-    # ------------------------------------------------
     def _get_file_hash(self):
+        if not self.data_path or not os.path.exists(self.data_path):
+            return "unknown"
         with open(self.data_path, "rb") as f:
             return hashlib.md5(f.read()).hexdigest()
 

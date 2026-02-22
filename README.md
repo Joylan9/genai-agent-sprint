@@ -507,10 +507,32 @@ nginx (reverse proxy)
 | **Performance** | Response caching, parallel tool execution, async I/O |
 | **Memory** | Hybrid short-term (recent) + long-term (semantic) memory |
 | **Scalability** | Celery workers, Docker-ready, stateless API design |
+| **Resilience** | Circuit Breakers (global LLM + tools), Retry Policy with exponential backoff |
 
 ---
 
-## License
+## 🛡️ Resilience & Failure Handling
+
+The platform is designed to handle external service failures gracefully:
+
+### 1. Circuit Breakers
+- **Global LLM:** All Ollama calls are wrapped in a module-level circuit breaker to prevent cascading failures.
+- **Web Search:** Individual circuit breaker for SerpAPI calls.
+- **States:** `CLOSED` (normal), `OPEN` (fail-fast), `HALF_OPEN` (recovery probe).
+
+### 2. Retries & Timeouts
+- **Exponential Backoff:** Configurable retries for transient tool failures.
+- **Strict Timeouts:** Enforced at the executor level to prevent hanging requests.
+
+### 3. Failure Simulation
+To run the automated failure simulation scenarios (requires PowerShell):
+```powershell
+./scripts/failure_test.ps1
+```
+
+---
+
+## 🏗️ Production Readiness Checks
 
 This project is for educational and portfolio purposes.
 
