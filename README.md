@@ -1,158 +1,331 @@
-# 💎 GenAI Agent Platform: Universal Enterprise Handbook
+# GenAI Agent Platform
 
-[![Frontend Status](https://img.shields.io/badge/Frontend-10/10_Production_Ready-blue?logo=react)](./frontend/Architecture.md)
-[![Backend Status](https://img.shields.io/badge/Backend-Production_Certified-green?logo=fastapi)](./app/api_app.py)
-[![DevOps Status](https://img.shields.io/badge/DevOps-CI/CD_Hardened-orange?logo=github)](./.github/workflows/frontend-cd.yml)
+Enterprise-grade reference implementation for an agentic AI platform with a FastAPI backend, React control plane, Redis/Celery async execution, MongoDB memory, and Nginx-based frontend delivery.
 
-The **GenAI Agent Platform** is a professional-grade AI orchestration ecosystem. This singular manual provides an exhaustive, 360-degree view of the entire system—from the high-performance FastAPI execution engine to the production-hardened React Control Plane.
+## 1. Executive Summary
 
----
+This repository contains two primary runtime surfaces:
+- Backend API and orchestration: `app/api_app.py`
+- Frontend SPA and gateway: `frontend/` (Vite + React + Nginx)
 
-## 🏛️ 1. Platform Architecture & Topology
+It is designed to support:
+- Tool-augmented agent execution (`/agent/run`)
+- Health/readiness/metrics for operations
+- Runtime-configurable frontend deployment via `config.js`
+- Containerized deployment with GitHub Actions CD for frontend images
 
-The platform is designed as a **fault-tolerant service mesh**, separating the control plane (UI) from the execution plane (API/Workers) and the compute layer (LLM).
+## 2. Architecture
+
+### 2.1 System Topology
 
 ```mermaid
 graph TD
-    User((🌍 Users)) --> |HTTPS| CDN[Global CDN / Cloudflare]
-    CDN --> |Static Assets| FE[Frontend SPA: Nginx/React]
-    FE -- |API Requests + X-Request-ID| GW[API Gateway: FastAPI]
-    
-    subgraph "Core Service Mesh"
-        GW --> DB[(Primary Store: MongoDB)]
-        GW --> Redis[(Queue Broker: Redis)]
-        GW --> Ollama[LLM Engine: Ollama]
-    end
-    
-    subgraph "Async Execution Plane"
-        Redis --> Workers[Celery Cluster]
-        Workers --> Ollama
-        Workers --> VectorDB[(Vector DB: Local/Qdrant)]
-    end
-    
-    subgraph "Enterprise Observability"
-        FE --> Sentry[Sentry Error Tracking]
-        FE --> Telemetry[Behavioral Analytics]
-        GW --> Prom[Prometheus Metrics]
-        Prom --> Grafana[Grafana Dashboards]
-    end
+    U[User Browser] -->|HTTPS| NGINX[Nginx Frontend]
+    NGINX -->|Static SPA| SPA[React App]
+    SPA -->|REST API| API[FastAPI app/api_app.py]
+
+    API -->|state + traces| MONGO[(MongoDB)]
+    API -->|broker/backend| REDIS[(Redis)]
+    API -->|inference| OLLAMA[Ollama]
+
+    REDIS --> WORKER[Celery Worker]
+    WORKER --> OLLAMA
+    WORKER --> MONGO
+
+    API --> METRICS[/metrics Prometheus endpoint/]
 ```
 
----
+### 2.2 Request and Execution Flow
 
-## 📂 2. Universal Folder structure
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant F as Frontend (agentClient)
+    participant A as FastAPI
+    participant O as Ollama
+    participant D as MongoDB
+
+    B->>F: Submit goal
+    F->>A: POST /agent/run (+ X-Request-ID, X-API-KEY)
+    A->>A: Validate input and auth
+    A->>O: Plan/execute via agent service
+    A->>D: Persist execution artifacts
+    A-->>F: AgentResponse (result, request_id)
+    F-->>B: Render result
+```
+
+## 3. Repository Structure
 
 ```text
-/genai-agent-sprint
-├── .github/workflows/      # [CI/CD] Automated Engineering Gates
-│   └── frontend-cd.yml     # Logic: Lint -> TypeCheck -> Vitest -> Docker Cache -> Push
-├── app/                    # [BACKEND] Core Agent Engine Logic
-│   ├── api/                # FastAPI Endpoints (Agent, Health, Readiness)
-│   ├── core/               # Semantic Search & Vector Logic
-│   ├── infra/              # Reliability: Circuit Breakers, Retry, Timeout Executors
-│   ├── memory/             # Database Connector (MongoDB) & Conversation History
-│   ├── observability/      # Health Monitoring & Prometheus Metrics
-│   ├── registry/           # Agent Tool Inventory & Registry
-│   ├── security/           # Policy Engine, PII Redaction, Input Sanitization
-│   ├── services/           # Planning Agent, Embedding, and Retrieval logic
-│   ├── tools/              # Specialized Tools (RAG Search, Web Search)
-│   └── api_app.py          # Master API Gateway Orchestrator
-├── frontend/               # [FRONTEND] Production-Hardened React Control Plane
-│   ├── src/
-│   │   ├── app/            # Infrastructure: Layout, Shell, Monitoring, Providers
-│   │   ├── features/       # Domains: Agents, Runs, Playground, Status Dashboard
-│   │   ├── shared/         # Foundation: UI Palette, Axios Client, Auth Interceptors
-│   │   └── main.tsx        # Application Root
-│   ├── nginx.conf          # Hardened Production Web Gateway (HSTS, CSP, Gzip)
-│   └── Dockerfile          # Multi-stage optimized production build
-├── data/                   # [KNOWLEDGE BASE]
-│   ├── raw/                # Unstructured Technical Documentation
-│   └── vector_store.pkl    # Compiled Semantic Database for RAG
-├── scripts/                # [DEVOPS] Platform Utility Scripts
-│   ├── build_vector_store.py # RAG Compiler & Vectorizer
-│   └── validate_prod_ready.py # Enterprise Readiness Audit Script
-├── tests/                  # [QUALITY] 54+ Tests (Unit & Integration)
-├── docker-compose.yml      # Cloud-Native Infrastructure Orchestration
-└── .env                    # Centralized Environment Secrets
+genai-agent-sprint/
+  .github/workflows/           # CI/CD workflows
+  api/                         # Alternate API entrypoints/schemas
+  app/                         # Primary backend runtime code
+    api/                       # API routers
+    observability/             # /health and /ready routers
+    infra/                     # Retry/timeout/logging/celery/ollama integration
+    memory/                    # MongoDB adapter and models
+    services/                  # Agent, planning, retrieval, memory services
+    tools/                     # Tool implementations (RAG, web search)
+    api_app.py                 # Production backend entrypoint
+  frontend/                    # React SPA + Nginx container config
+  scripts/                     # Utility scripts (validation, config generation, etc.)
+  tests/                       # Backend test suite
+  docker-compose.yml           # Local infra and app orchestration
+  Dockerfile                   # Backend image build
 ```
 
----
+## 4. Backend Runtime
 
-## 🔥 3. Enterprise Hardening (The 11/10 Standard)
+### 4.1 Production Entrypoint
 
-1.  **Adaptive Resilience**: The UI monitors system health in real-time. If the LLM or API Gateway is offline, execution features automatically degrade gracefully.
-2.  **Edge Security & Traffic Control**:
-    - **Nginx Rate Limiting**: Enforced at 10r/s with 20 burst capacity to prevent DOS.
-    - **TLS termination**: Production template ready for port 443 with HSTS (`max-age=63072000`) and TLS 1.3.
-    - **Strict CSP**: Production-tightened Content Security Policy with zero "unsafe" sources.
-3.  **CI/CD Registry Integration**: Production-ready images are automatically audited via `npm audit` and pushed to the **GitHub Container Registry (GHCR)**.
-4.  **Zero-Rebuild Deployments**: Environment variables are injected at runtime via `/config.js`, ensuring immutable build artifacts.
-5.  **Distributed Tracing**: Every agent transaction carries a unique `X-Request-ID` traceable from the UI to the backend logs.
+- File: `app/api_app.py`
+- Exposes:
+  - `GET /` service metadata
+  - `GET /health`
+  - `GET /ready`
+  - `POST /agent/run`
+  - `GET /metrics` (Prometheus ASGI mount)
 
----
+### 4.2 Startup Dependency Gates
 
-## 🚀 4. Full Execution Handbook (Step-by-Step)
+At startup, backend validates critical environment variables and dependencies:
+- Required env vars: `API_KEY`, `SERPAPI_KEY`, `HF_TOKEN`, `MONGO_URI`, `OLLAMA_HOST`
+- Connectivity checks include Mongo initialization and index creation
 
-### **A. Environment Preparation**
+### 4.3 Security and Validation
+
+- API key verification on protected agent endpoints
+- Goal input validation through `app/infra/validators.py`
+- Request size guard exists in `api/app.py` for alternate entrypoint
+
+## 5. Frontend Runtime
+
+### 5.1 Agent Client Hardening
+
+`frontend/src/features/agent/api/agentClient.ts` includes:
+- Per-request `X-Request-ID` generation
+- Runtime-configurable refresh endpoint (`REFRESH_ENDPOINT`)
+- Telemetry abstraction using `navigator.sendBeacon` when configured
+- 401 refresh queue handling to prevent token refresh storms
+
+### 5.2 Runtime Config Injection
+
+- Frontend reads `window.__APP_CONFIG__` from `/config.js`
+- `index.html` loads `/config.js` before app bootstrap
+- `scripts/generate-config.sh` emits deployment-specific config without rebuild
+
+### 5.3 Nginx Hardening
+
+`frontend/nginx.conf` provides:
+- Rate limiting (`10r/s`, burst `20`)
+- SPA routing fallback (`try_files ... /index.html`)
+- Security headers (`X-Frame-Options`, `X-Content-Type-Options`, CSP)
+- Health endpoints (`/healthz`, `/ready`)
+- Asset cache policy and gzip compression
+- HTTPS template block with HSTS and TLS 1.2/1.3 settings
+
+## 6. CI/CD (Frontend)
+
+Workflow: `.github/workflows/frontend-cd.yml`
+
+Pipeline stages:
+1. Checkout
+2. CodeQL init
+3. Node setup with npm cache
+4. Install (`npm ci`)
+5. Type check
+6. Lint
+7. Tests
+8. Build
+9. `npm audit --audit-level=moderate` (blocking)
+10. Upload build artifact
+11. CodeQL analyze
+12. GHCR login (non-PR)
+13. Docker Buildx build and push with GitHub Actions cache
+
+Images are tagged:
+- `ghcr.io/<owner>/genai-agent-frontend:<sha>`
+- `ghcr.io/<owner>/genai-agent-frontend:latest`
+
+## 7. Complete Execution Process
+
+### 7.1 Prerequisites
+
+- Python 3.11+
+- Node.js 20+
+- Docker + Docker Compose
+- Ollama running and reachable from backend
+
+### 7.2 Environment Setup
+
 ```bash
-# 1. Initialize Secrets
 cp .env.example .env
-
-# 2. Start Core Infrastructure (DB/Cache)
-docker-compose up -d
-
-# 3. Compiling the AI Knowledge Base (RAG)
-python scripts/build_vector_store.py
 ```
 
-### **B. Backend Deployment**
+Populate sensitive values in `.env`:
+- `API_KEY`
+- `SERPAPI_KEY`
+- `HF_TOKEN`
+- `MONGO_URI`
+- `OLLAMA_HOST`
+
+### 7.3 Local Infrastructure
+
 ```bash
-# 1. Setup Python Runtime
+docker compose up -d mongo redis
+```
+
+### 7.4 Backend Local Run
+
+```bash
 pip install -r requirements.txt
-
-# 2. Launch the Orchestrator
-python app/api_app.py
+uvicorn app.api_app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### **C. Frontend Deployment**
+Alternative production-style run:
+
 ```bash
-# 1. Install Dependencies
-cd frontend && npm install
-
-# 2. Start Control Plane (Dev)
-npm run dev
-
-# 3. Registry Push (CI)
-# Images are pushed to: ghcr.io/${{ github.repository }}/genai-agent-frontend:latest
+gunicorn app.api_app:app -k uvicorn.workers.UvicornWorker -w 1 -b 0.0.0.0:8000 --timeout 120
 ```
 
+### 7.5 Frontend Local Run
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+### 7.6 Generate Runtime Config
+
+```bash
+API_BASE=http://localhost:8000 APP_VERSION=local-dev ./scripts/generate-config.sh > frontend/public/config.js
+```
+
+### 7.7 Frontend Container Build and Run
+
+```bash
+docker build -t genai-frontend:local ./frontend
+docker run --rm -p 8080:80 \
+  -e API_BASE=http://host.docker.internal:8000 \
+  -e APP_VERSION=local \
+  genai-frontend:local
+```
+
+### 7.8 Full Stack with Compose
+
+```bash
+docker compose up -d
+```
+
+## 8. Deployment Diagram
+
+```mermaid
+flowchart LR
+    Commit[Git Push to main] --> GA[GitHub Actions frontend-cd.yml]
+    GA --> QA[Typecheck + Lint + Test + Audit + CodeQL]
+    QA --> Build[Docker Buildx]
+    Build --> GHCR[Push image to GHCR]
+    GHCR --> Deploy[Deploy container]
+    Deploy --> RuntimeCfg[generate-config.sh writes /config.js at startup]
+    RuntimeCfg --> Live[Live frontend with env-specific API routing]
+```
+
+## 9. Verification and Acceptance
+
+Run these after deployment:
+
+```bash
+nginx -t
+curl -I https://<your-domain>
+curl -i https://<your-domain>/ready
+curl -i https://<your-domain>/healthz
+curl -i https://<your-domain>/config.js
+docker buildx build --tag ghcr.io/<org>/genai-agent-frontend:local --load ./frontend
+```
+
+Expected checks:
+- `Strict-Transport-Security` appears on HTTPS responses
+- CSP header present
+- `/ready` and `/healthz` return HTTP 200 from frontend gateway
+- `/config.js` served as `application/javascript`
+
+## 10. Testing and Quality Gates
+
+### Backend
+
+```bash
+pytest -q
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm run lint
+npm run test -- --run
+npm run build
+```
+
+## 11. Operations and Monitoring
+
+### 11.1 Health and Readiness
+
+- Backend health: `GET /health`
+- Backend readiness: `GET /ready`
+- Frontend probe endpoints: `/healthz`, `/ready`
+
+### 11.2 Metrics
+
+- Prometheus scrape endpoint: `GET /metrics`
+
+### 11.3 Logs
+
+```bash
+docker logs genai-api -f
+docker logs genai-worker -f
+docker logs genai-mongo -f
+docker logs genai-redis -f
+```
+
+## 12. Security Controls Summary
+
+- API key verification on agent execution routes
+- Nginx rate limiting and secure headers
+- TLS + HSTS template for production
+- Blocking dependency audit in CI
+- CodeQL static analysis in CI
+- Runtime config injection to avoid secret baking into static assets
+
+## 13. Known Gaps and Integration Notes
+
+- Frontend currently contains calls for `/api/agents`, `/api/runs`, and `/traces/{requestId}` in `agentClient.ts`; ensure backend routes are implemented or feature-gated before production cutover.
+- `index.html` includes a CSP meta tag for dev; in production, prefer enforcing CSP via Nginx headers only.
+- Enable Brotli directives in Nginx only when module support is present in the image.
+
+## 14. Release Checklist
+
+- [ ] Secrets configured in deployment environment
+- [ ] `.env` values validated in staging
+- [ ] Backend startup gates pass
+- [ ] Frontend CI pipeline green on `main`
+- [ ] Image pushed to GHCR with SHA tag
+- [ ] `config.js` generated at runtime with production API base
+- [ ] Nginx HTTPS block configured with real certificate paths and domain
+- [ ] Post-deploy verification commands pass
+
+## 15. Key Files Reference
+
+- Backend entrypoint: `app/api_app.py`
+- Frontend API client: `frontend/src/features/agent/api/agentClient.ts`
+- Frontend Nginx config: `frontend/nginx.conf`
+- Frontend Docker image build: `frontend/Dockerfile`
+- Runtime config script: `scripts/generate-config.sh`
+- Frontend CD workflow: `.github/workflows/frontend-cd.yml`
+- Local orchestration: `docker-compose.yml`
+
 ---
 
-## 🖱️ 5. User Guide: "How to Execute Your First Agent"
+This README is intentionally implementation-aligned so platform, security, and operations teams can execute the same runbook across local, staging, and production environments.
 
-Follow these steps to experience the full platform logic:
-
-1.  **Verify Health**: Check the **TopNav**. If the indicator is **Green**, the LLM is ready.
-2.  **NOC Monitoring**: Press `Ctrl+K` and go to **Status**. Verify that latency is `< 200ms`.
-3.  **Readiness Probe**: Check `http://localhost:80/ready` to verify Nginx is active and stable.
-4.  **Agent Creation**:
-    - Sidebar -> **Agents** -> **Create Agent**.
-    - Set Objective: `Explain the impact of Breadth-First-Search on large graphs`.
-5.  **Execution & Tracing**:
-    - Sidebar -> **Playground**.
-    - Select your Agent and click **Execute**.
-    - Watch the **Trace Timeline** populate. Click any step to see exactly how the agent queried the RAG vector store or redacted sensitive data.
-5.  **Audit Logs**: Click any step in the trace to view the raw JSON interchange and PII redaction logic in action.
-
----
-
-## 🛠️ 6. Maintenance & Quality
-- **Testing**: `pytest` (Backend) | `npm run test` (Frontend).
-- **Audit**: Run `python scripts/validate_prod_ready.py` for a full security scan.
-- **Production Logs**: `docker logs genai-agent-api -f`.
-
----
-
-<p align="center">
-  <sub>Generated by the Enterprise Architecture Team. Ready for scale.</sub>
-</p>
