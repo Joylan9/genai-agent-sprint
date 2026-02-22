@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+/* keep minimal global defaults */
+:root {
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+/* remove Vite layout forcing */
+body {
+  margin: 0;
+}
