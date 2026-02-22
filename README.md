@@ -78,59 +78,70 @@ graph TD
 
 ---
 
-## 🔥 3. Enterprise Hardening (The 10/10 Standard)
+## 🔥 3. Enterprise Hardening (The 11/10 Standard)
 
-- **Adaptive Resilience**: The UI monitors system health in real-time. If the LLM or API Gateway is offline, execution features automatically degrade gracefully to prevent user frustration.
-- **Circuit Breaker Logic**: Backend prevents cascading failures by isolating broken external tools (Web/RAG) with a stateful circuit breaker.
-- **Zero-Rebuild Deployments**: Environment variables are injected at runtime via `/config.js`, allowing the same immutable Docker image to be promoted through all environments.
-- **Distributed Tracing**: Every agent transaction carries a unique `X-Request-ID`, enabling end-to-end auditability from the React UI down to the MongoDB trace store.
-
----
-
-## 🚀 4. Full Execution Handbook
-
-### **Phase 1: Environment Setup**
-1.  **Initialize Secrets**: 
-    ```bash
-    cp .env.example .env
-    # Required: SERPAPI_KEY, API_KEY, MONGO_URI, OLLAMA_HOST
-    ```
-2.  **Start Infrastructure**: 
-    ```bash
-    docker-compose up -d
-    # Spins up MongoDB, Redis, and Prometheus
-    ```
-3.  **Build AI Knowledge Base**: 
-    ```bash
-    python scripts/build_vector_store.py
-    ```
-
-### **Phase 2: Platform Startup**
-1.  **Backend API**: 
-    ```bash
-    pip install -r requirements.txt
-    python app/api_app.py
-    ```
-2.  **Frontend UI**: 
-    ```bash
-    cd frontend && npm install
-    npm run dev
-    ```
+1.  **Adaptive Resilience**: The UI monitors system health in real-time. If the LLM or API Gateway is offline, execution features automatically degrade gracefully.
+2.  **Edge Security & Traffic Control**:
+    - **Nginx Rate Limiting**: Enforced at 10r/s with 20 burst capacity to prevent DOS.
+    - **TLS termination**: Production template ready for port 443 with HSTS (`max-age=63072000`) and TLS 1.3.
+    - **Strict CSP**: Production-tightened Content Security Policy with zero "unsafe" sources.
+3.  **CI/CD Registry Integration**: Production-ready images are automatically audited via `npm audit` and pushed to the **GitHub Container Registry (GHCR)**.
+4.  **Zero-Rebuild Deployments**: Environment variables are injected at runtime via `/config.js`, ensuring immutable build artifacts.
+5.  **Distributed Tracing**: Every agent transaction carries a unique `X-Request-ID` traceable from the UI to the backend logs.
 
 ---
 
-## 🖱️ 5. UI User Guide: "How to Execute Your First Agent"
+## 🚀 4. Full Execution Handbook (Step-by-Step)
 
-Follow this path to verify the full project logic:
+### **A. Environment Preparation**
+```bash
+# 1. Initialize Secrets
+cp .env.example .env
 
-1.  **Check Pulse**: Open the app and verify the **Green Indicator** in the TopNav.
-2.  **NOC Monitoring**: Press `Ctrl+K`, type "Status", and hit Enter. Verify all system components are "Operational."
-3.  **Agent Creation**:
+# 2. Start Core Infrastructure (DB/Cache)
+docker-compose up -d
+
+# 3. Compiling the AI Knowledge Base (RAG)
+python scripts/build_vector_store.py
+```
+
+### **B. Backend Deployment**
+```bash
+# 1. Setup Python Runtime
+pip install -r requirements.txt
+
+# 2. Launch the Orchestrator
+python app/api_app.py
+```
+
+### **C. Frontend Deployment**
+```bash
+# 1. Install Dependencies
+cd frontend && npm install
+
+# 2. Start Control Plane (Dev)
+npm run dev
+
+# 3. Registry Push (CI)
+# Images are pushed to: ghcr.io/${{ github.repository }}/genai-agent-frontend:latest
+```
+
+---
+
+## 🖱️ 5. User Guide: "How to Execute Your First Agent"
+
+Follow these steps to experience the full platform logic:
+
+1.  **Verify Health**: Check the **TopNav**. If the indicator is **Green**, the LLM is ready.
+2.  **NOC Monitoring**: Press `Ctrl+K` and go to **Status**. Verify that latency is `< 200ms`.
+3.  **Readiness Probe**: Check `http://localhost:80/ready` to verify Nginx is active and stable.
+4.  **Agent Creation**:
     - Sidebar -> **Agents** -> **Create Agent**.
-    - Goal: `Compare HSTS vs CSP for enterprise security`.
-4.  **Live Execution**:
-    - Sidebar -> **Playground** -> Select Agent -> **Execute**.
-    - Watch the **Trace Timeline**. You will see the agent query the RAG store and synthesize a security-hardened response.
+    - Set Objective: `Explain the impact of Breadth-First-Search on large graphs`.
+5.  **Execution & Tracing**:
+    - Sidebar -> **Playground**.
+    - Select your Agent and click **Execute**.
+    - Watch the **Trace Timeline** populate. Click any step to see exactly how the agent queried the RAG vector store or redacted sensitive data.
 5.  **Audit Logs**: Click any step in the trace to view the raw JSON interchange and PII redaction logic in action.
 
 ---

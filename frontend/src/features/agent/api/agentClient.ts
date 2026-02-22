@@ -10,22 +10,26 @@ import type {
 
 declare global {
     interface Window {
-        __APP_CONFIG__: {
-            VITE_API_BASE: string;
-            VITE_API_KEY: string;
-            APP_VERSION: string;
-            FEATURE_FLAGS_ENDPOINT: string;
-            FRONTEND_HEALTH_ENDPOINT: string;
+        __APP_CONFIG__?: {
+            VITE_API_BASE?: string;
+            VITE_API_KEY?: string;
+            APP_VERSION?: string;
+            FEATURE_FLAGS_ENDPOINT?: string;
+            FRONTEND_HEALTH_ENDPOINT?: string;
+            REFRESH_ENDPOINT?: string;
+            TELEMETRY_ENDPOINT?: string;
         };
     }
 }
 
 function getRuntimeConfig() {
-    const cfg = ((typeof window !== "undefined" && window.__APP_CONFIG__) || {}) as any;
+    const cfg = (typeof window !== "undefined" && window.__APP_CONFIG__) || {};
     return {
         API_BASE_URL: cfg.VITE_API_BASE || import.meta.env.VITE_API_BASE || 'http://localhost:8000',
         API_KEY: cfg.VITE_API_KEY || import.meta.env.VITE_API_KEY,
-        APP_VERSION: cfg.APP_VERSION || '0.0.0-LOCAL'
+        APP_VERSION: cfg.APP_VERSION || '0.0.0-LOCAL',
+        REFRESH_ENDPOINT: cfg.REFRESH_ENDPOINT || '/api/auth/refresh',
+        TELEMETRY_ENDPOINT: cfg.TELEMETRY_ENDPOINT || undefined
     };
 }
 
@@ -33,6 +37,8 @@ const runtime = getRuntimeConfig();
 const API_BASE_URL = runtime.API_BASE_URL;
 const API_KEY = runtime.API_KEY;
 const APP_VERSION = runtime.APP_VERSION;
+const REFRESH_ENDPOINT = runtime.REFRESH_ENDPOINT;
+const TELEMETRY_ENDPOINT = runtime.TELEMETRY_ENDPOINT;
 
 class AgentClient {
     public instance: AxiosInstance;
@@ -54,17 +60,14 @@ class AgentClient {
     }
 
     private setupInterceptors() {
-        // Request interceptor for API Key, Correlation, and Telemetry
+        // Request interceptor for API Key and per-request Correlation ID
         this.instance.interceptors.request.use(
             (config: InternalAxiosRequestConfig) => {
                 if (API_KEY) {
                     config.headers['X-API-KEY'] = API_KEY;
                 }
-
-                // Distributed Tracing: Unique ID per request
-                config.headers['X-Request-ID'] = crypto.randomUUID?.() ||
-                    Math.random().toString(36).substring(2, 15);
-
+                // Generate a unique X-Request-ID per outgoing request
+                config.headers['X-Request-ID'] = crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
                 return config;
             },
             (error) => Promise.reject(this.normalizeError(error))
@@ -73,19 +76,14 @@ class AgentClient {
         // Response interceptor for error normalization, telemetry, and session expiry
         this.instance.interceptors.response.use(
             (response: AxiosResponse) => {
-                // Track success events
                 if (response.config.url?.includes('/agent/run')) {
-                    this.trackEvent('agent_run_success', {
-                        url: response.config.url,
-                        requestId: response.config.headers['X-Request-ID']
-                    });
+                    this.trackEvent('agent_run_success', { url: response.config.url });
                 }
                 return response.data;
             },
             async (error: AxiosError) => {
                 const originalRequest = error.config as any;
 
-                // Handle 401 Unauthorized (Session Expired) with Retry Queue
                 if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
                     if (this.isRefreshing) {
                         return new Promise((resolve, reject) => {
@@ -101,32 +99,26 @@ class AgentClient {
                     this.isRefreshing = true;
 
                     try {
-                        const refreshEndpoint = (window as any).__APP_CONFIG__?.REFRESH_ENDPOINT || '/api/auth/refresh';
-                        this.trackEvent('session_refresh_started');
-
-                        // Attempt silent refresh
-                        await this.instance.post(refreshEndpoint);
+                        this.trackEvent('session_refresh_started', { url: originalRequest.url });
+                        await this.instance.post(REFRESH_ENDPOINT);
                         this.isRefreshing = false;
                         this.processQueue(null);
                         return this.instance(originalRequest);
                     } catch (refreshError) {
                         this.isRefreshing = false;
                         this.processQueue(refreshError);
-                        this.trackEvent('session_expired_final');
-                        // Optional: window.location.href = '/login';
+                        this.trackEvent('session_expired_final', { url: originalRequest.url });
                         return Promise.reject(this.normalizeError(refreshError));
                     }
                 }
 
                 const normalized = this.normalizeError(error);
-
-                // Track API errors with context
                 this.trackEvent('api_error', {
                     status: normalized.status,
-                    message: normalized.message,
+                    code: normalized.code,
+                    url: error.config?.url,
                     requestId: originalRequest?.headers?.['X-Request-ID']
                 });
-
                 return Promise.reject(normalized);
             }
         );
@@ -143,26 +135,29 @@ class AgentClient {
         this.failedQueue = [];
     }
 
-    /**
-     * Enterprise Observability Abstraction
-     */
-    private trackEvent(name: string, data: any = {}) {
-        // Fallback to console for dev
-        if (import.meta.env.DEV) {
-            console.debug(`[TELEMETRY] ${name}:`, data);
+    private trackEvent(name: string, properties: Record<string, any> = {}) {
+        const payload = {
+            name,
+            properties: {
+                ...properties,
+                timestamp: new Date().toISOString(),
+                environment: import.meta.env.MODE,
+                version: APP_VERSION
+            }
+        };
+
+        if (TELEMETRY_ENDPOINT && typeof navigator !== 'undefined' && navigator.sendBeacon) {
+            try {
+                const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+                navigator.sendBeacon(TELEMETRY_ENDPOINT, blob);
+                return;
+            } catch (e) {
+                // fall through to console
+            }
         }
 
-        // Production beaconing if configured
-        const telemetryEndpoint = (window as any).__APP_CONFIG__?.TELEMETRY_ENDPOINT;
-        if (telemetryEndpoint && navigator.sendBeacon) {
-            const payload = JSON.stringify({
-                event: name,
-                timestamp: new Date().toISOString(),
-                version: APP_VERSION,
-                data
-            });
-            navigator.sendBeacon(telemetryEndpoint, payload);
-        }
+        // Fallback
+        console.debug('[TELEMETRY]', payload);
     }
 
     private normalizeError(error: any): ApiError {
@@ -198,7 +193,6 @@ class AgentClient {
         return this.instance.get(`/traces/${requestId}`);
     }
 
-    // Future-proofing methods (to be supported by backend or mocked with MSW)
     async listAgents(): Promise<any[]> {
         return this.instance.get('/api/agents');
     }
