@@ -5,6 +5,7 @@ import { RunsListPage } from './pages/Runs';
 import { RunDetailsPage } from './pages/RunDetails';
 import { PlaygroundPage } from './pages/Playground';
 import { AppShell } from './app/layout/AppShell';
+import { SystemStatusPage } from './app/monitoring/SystemStatus';
 
 const App = () => {
   return (
@@ -15,6 +16,7 @@ const App = () => {
         <Route path="/runs" element={<RunsListPage />} />
         <Route path="/runs/:id" element={<RunDetailsPage />} />
         <Route path="/execute" element={<PlaygroundPage />} />
+        <Route path="/status" element={<SystemStatusPage />} />
       </Routes>
     </AppShell>
   );

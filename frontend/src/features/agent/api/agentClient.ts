@@ -54,12 +54,17 @@ class AgentClient {
     }
 
     private setupInterceptors() {
-        // Request interceptor for API Key
+        // Request interceptor for API Key, Correlation, and Telemetry
         this.instance.interceptors.request.use(
             (config: InternalAxiosRequestConfig) => {
                 if (API_KEY) {
                     config.headers['X-API-KEY'] = API_KEY;
                 }
+
+                // Distributed Tracing: Unique ID per request
+                config.headers['X-Request-ID'] = crypto.randomUUID?.() ||
+                    Math.random().toString(36).substring(2, 15);
+
                 return config;
             },
             (error) => Promise.reject(this.normalizeError(error))
@@ -70,7 +75,10 @@ class AgentClient {
             (response: AxiosResponse) => {
                 // Track success events
                 if (response.config.url?.includes('/agent/run')) {
-                    this.trackEvent('agent_run_success', { url: response.config.url });
+                    this.trackEvent('agent_run_success', {
+                        url: response.config.url,
+                        requestId: response.config.headers['X-Request-ID']
+                    });
                 }
                 return response.data;
             },
@@ -93,16 +101,18 @@ class AgentClient {
                     this.isRefreshing = true;
 
                     try {
-                        this.trackEvent('session_refresh_started', { url: originalRequest.url });
+                        const refreshEndpoint = (window as any).__APP_CONFIG__?.REFRESH_ENDPOINT || '/api/auth/refresh';
+                        this.trackEvent('session_refresh_started');
+
                         // Attempt silent refresh
-                        await this.instance.post('/api/auth/refresh');
+                        await this.instance.post(refreshEndpoint);
                         this.isRefreshing = false;
                         this.processQueue(null);
                         return this.instance(originalRequest);
                     } catch (refreshError) {
                         this.isRefreshing = false;
                         this.processQueue(refreshError);
-                        this.trackEvent('session_expired_final', { url: originalRequest.url });
+                        this.trackEvent('session_expired_final');
                         // Optional: window.location.href = '/login';
                         return Promise.reject(this.normalizeError(refreshError));
                     }
@@ -110,11 +120,11 @@ class AgentClient {
 
                 const normalized = this.normalizeError(error);
 
-                // Track failure events
+                // Track API errors with context
                 this.trackEvent('api_error', {
                     status: normalized.status,
-                    code: normalized.code,
-                    url: error.config?.url
+                    message: normalized.message,
+                    requestId: originalRequest?.headers?.['X-Request-ID']
                 });
 
                 return Promise.reject(normalized);
@@ -134,14 +144,25 @@ class AgentClient {
     }
 
     /**
-     * Mock telemetry tracker for enterprise observability (Sentry/Mixpanel replacement)
+     * Enterprise Observability Abstraction
      */
-    private trackEvent(name: string, properties: Record<string, any>) {
-        console.log(`[TELEMETRY] ${name}`, {
-            ...properties,
-            timestamp: new Date().toISOString(),
-            environment: import.meta.env.MODE
-        });
+    private trackEvent(name: string, data: any = {}) {
+        // Fallback to console for dev
+        if (import.meta.env.DEV) {
+            console.debug(`[TELEMETRY] ${name}:`, data);
+        }
+
+        // Production beaconing if configured
+        const telemetryEndpoint = (window as any).__APP_CONFIG__?.TELEMETRY_ENDPOINT;
+        if (telemetryEndpoint && navigator.sendBeacon) {
+            const payload = JSON.stringify({
+                event: name,
+                timestamp: new Date().toISOString(),
+                version: APP_VERSION,
+                data
+            });
+            navigator.sendBeacon(telemetryEndpoint, payload);
+        }
     }
 
     private normalizeError(error: any): ApiError {

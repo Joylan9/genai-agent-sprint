@@ -1,29 +1,17 @@
 # Build stage
-FROM node:20-alpine AS build
-
+FROM node:20-alpine AS builder
 WORKDIR /app
-
 COPY package*.json ./
-RUN npm install
-
+RUN npm ci
 COPY . .
 RUN npm run build
 
 # Production stage
 FROM nginx:alpine
-
-COPY --from=build /app/dist /usr/share/nginx/html
-
-# Custom nginx config to handle SPA routing
-RUN echo 'server { \
-    listen 80; \
-    location / { \
-        root /usr/share/nginx/html; \
-        index index.html; \
-        try_files $uri $uri/ /index.html; \
-    } \
-}' > /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/dist /usr/share/nginx/html
+# config.js is copied separately to allow easy mounting/injection in k8s/docker
+COPY --from=builder /app/public/config.js /usr/share/nginx/html/config.js
 
 EXPOSE 80
-
 CMD ["nginx", "-g", "daemon off;"]

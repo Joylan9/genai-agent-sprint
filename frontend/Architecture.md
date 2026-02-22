@@ -1,32 +1,36 @@
 # Architecture & Operations Blueprint
 
-## 🏛️ Layered Architecture
-The application follows a strict domain-driven design (DDD) structure to ensure scalability and isolation.
+## 🏛️ Production Topology (Enterprise Stack)
+```mermaid
+graph TD
+    User((🌍 Users)) --> CDN[Global CDN / Cloudflare]
+    CDN --> FE[Frontend SPA: Nginx/React]
+    FE -- API Calls --> GW[API Gateway: FastAPI]
+    
+    subgraph "Core Service Mesh"
+        GW --> DB[(Primary Store: PostgeSQL/Mongo)]
+        GW --> Redis[(Queue Broker: Redis)]
+        GW --> Ollama[LLM Engine: Ollama]
+    end
+    
+    subgraph "Async Execution"
+        Redis --> Workers[Celery Cluster]
+        Workers --> Ollama
+        Workers --> Vector[(Vector DB: Qdrant)]
+    end
+    
+    subgraph "Observability"
+        FE --> Sentry[Sentry Error Tracking]
+        GW --> Prom[Prometheus Metrics]
+        Prom --> Grafana[Grafana Dashboards]
+    end
+```
 
-### 1. AppShell (Infrastructure)
-- **Global Layout**: Sidebar navigation, TopNav with health monitoring.
-- **Error Handling**: `GlobalErrorBoundary` catches unhandled exceptions at the root.
-- **Routing**: React Router v7 with RBAC protection (`RequireRole`).
-
-### 2. Features (Domain Modules)
-- **Agent Feature**: CRUD, health checks, and stat visualizations.
-- **Run Feature**: Execution tracking, log viewing, and trace visualization.
-- **Playground**: Interactive prompt engineering with telemetry tracking.
-
-### 3. Shared (Foundation)
-- **UI Primitives**: Atomic components (Button, Input, Badge, Table) with accessibility compliance.
-- **Lib**: Typed utilities and design tokens.
-- **API Client**: Centralized Axios instance with telemetry interceptors.
-
-## 🔐 Security Model
-- **RBAC**: Role-based access control via `usePermission` hook.
-- **CSP**: Content Security Policy enforced via Meta tags.
-- **Governance**: Policy engine integration on the backend is reflected in UI through status indicators.
-
-## 📈 Observability & Reliability
-- **Telemetry**: Behavior tracking for key user journeys (agent runs, errors).
-- **Health**: Real-time polling of API and ML model availability.
-- **Tests**: Automated unit tests + Accessibility scans (8/8 passing).
+## 🏗️ Deployment Strategy
+- **Frontend**: Nginx-based SPA distribution via Docker. Custom `nginx.conf` ensures correct SPA routing and optimized asset delivery.
+- **Backend Orchestration**: Gunicorn + Uvicorn workers for high-concurrency API performance.
+- **Computation**: Async worker pool (Celery) prevents long-running AI tasks from blocking the API.
+- **Configuration**: Zero-rebuild environment injection via dynamic `/config.js`.
 
 ## 🛡️ Scale & Resilience (Harden 100%)
 - **Runtime Injection**: Zero-rebuild deployments via `window.__APP_CONFIG__` (loaded from `/config.js`).
