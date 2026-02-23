@@ -36,7 +36,7 @@ _llm_semaphore = None
 _llm_circuit = CircuitBreaker(
     failure_threshold=4,
     recovery_timeout=30,
-    execution_timeout=45,  # Slightly longer for inference
+    execution_timeout=150,  # Longer for slow inference
     name="llm"
 )
 
@@ -47,7 +47,7 @@ def get_ollama_client() -> Client:
     if _client is None:
         _client = Client(
             host=os.getenv("OLLAMA_HOST", "http://localhost:11434"),
-            timeout=30,
+            timeout=120.0,
         )
     return _client
 

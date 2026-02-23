@@ -17,13 +17,14 @@ export interface ApiError {
 
 export interface HealthStatus {
     status: string;
-    model: string;
-    version: string;
+    model?: string;
+    version?: string;
+    error?: string;
 }
 
 export interface ReadinessStatus {
-    status: 'ready' | 'degraded';
-    checks: Record<string, 'ready' | 'unavailable'>;
+    status: 'ready' | 'degraded' | 'not_ready' | string;
+    checks?: Record<string, 'ready' | 'unavailable' | string>;
 }
 
 // Future-proofing for blueprint requirements (mocked for now)

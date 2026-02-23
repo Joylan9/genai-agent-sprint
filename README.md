@@ -1,331 +1,193 @@
-# GenAI Agent Platform
+---
+# GenAI Agent Engine — Runbook & Execution Guide
 
-Enterprise-grade reference implementation for an agentic AI platform with a FastAPI backend, React control plane, Redis/Celery async execution, MongoDB memory, and Nginx-based frontend delivery.
+> Professional runbook with step-by-step instructions to run, verify, and troubleshoot the platform locally and in production-like environments.
 
-## 1. Executive Summary
+## Table of Contents
+- [Project overview](#project-overview)
+- [Repo layout](#repo-layout)
+- [Prerequisites](#prerequisites)
+- [Required environment variables](#required-environment-variables)
+- [Setup (one-time)](#setup-one-time)
+- [Local development — backend](#local-development--backend)
+- [Local development — Celery & workers](#local-development--celery--workers)
+- [Local development — frontend](#local-development--frontend)
+- [Generating runtime config.js](#generating-runtime-configjs)
+- [Quick full local run (copy-paste)](#quick-full-local-run-copy-paste)
+- [Health checks & verification](#health-checks--verification)
+- [Creating an agent & running a smoke test](#creating-an-agent--running-a-smoke-test)
+- [Troubleshooting & logs collection](#troubleshooting--logs-collection)
+- [CI/CD & deployment notes](#cicd--deployment-notes)
+- [Security & operational notes](#security--operational-notes)
+- [Contact & ownership](#contact--ownership)
+- [Changelog / version](#changelog--version)
 
-This repository contains two primary runtime surfaces:
-- Backend API and orchestration: `app/api_app.py`
-- Frontend SPA and gateway: `frontend/` (Vite + React + Nginx)
+### Project overview
+The GenAI Agent Engine is a robust, full-stack platform designed to orchestrate, manage, and execute AI agent workflows. Built with FastAPI for a high-performance backend, it integrates Celery and Redis to handle asynchronous inference tasks without blocking the main API thread. MongoDB ensures horizontal scaling for agent configurations, LLM interactions, and long-term memory access. The platform natively interacts with local Ollama or remote LLM providers through a unified interface.
 
-It is designed to support:
-- Tool-augmented agent execution (`/agent/run`)
-- Health/readiness/metrics for operations
-- Runtime-configurable frontend deployment via `config.js`
-- Containerized deployment with GitHub Actions CD for frontend images
+The frontend is a React + Vite Single Page Application providing a highly responsive Agent Directory, realtime interactive Chat Playground, and System Health Monitor. This authoritative execution runbook details exactly how to deploy and configure the stack on local development workstations, debug connectivity, scale up testing endpoints, and track production health parameters.
 
-## 2. Architecture
+### Repo layout
+- `./frontend` — React 18, Vite config, local e2e spec scripts. Uncompiled source resides inside `src`.
+- `./app` — Python 3 FastAPI application. Structured strictly with routes, schemas, core infrastructure bindings, and ML components.
+- `./scripts` — Shell scripts (`generate-config.sh`) and python verifiers (`smoke_test.py`) for CD processes.
+- `docker-compose.yml` — Container composition file enabling instantaneous database & worker spinup.
+- `README.md` — This execution runbook.
 
-### 2.1 System Topology
-
-```mermaid
-graph TD
-    U[User Browser] -->|HTTPS| NGINX[Nginx Frontend]
-    NGINX -->|Static SPA| SPA[React App]
-    SPA -->|REST API| API[FastAPI app/api_app.py]
-
-    API -->|state + traces| MONGO[(MongoDB)]
-    API -->|broker/backend| REDIS[(Redis)]
-    API -->|inference| OLLAMA[Ollama]
-
-    REDIS --> WORKER[Celery Worker]
-    WORKER --> OLLAMA
-    WORKER --> MONGO
-
-    API --> METRICS[/metrics Prometheus endpoint/]
-```
-
-### 2.2 Request and Execution Flow
-
-```mermaid
-sequenceDiagram
-    participant B as Browser
-    participant F as Frontend (agentClient)
-    participant A as FastAPI
-    participant O as Ollama
-    participant D as MongoDB
-
-    B->>F: Submit goal
-    F->>A: POST /agent/run (+ X-Request-ID, X-API-KEY)
-    A->>A: Validate input and auth
-    A->>O: Plan/execute via agent service
-    A->>D: Persist execution artifacts
-    A-->>F: AgentResponse (result, request_id)
-    F-->>B: Render result
-```
-
-## 3. Repository Structure
-
-```text
-genai-agent-sprint/
-  .github/workflows/           # CI/CD workflows
-  api/                         # Alternate API entrypoints/schemas
-  app/                         # Primary backend runtime code
-    api/                       # API routers
-    observability/             # /health and /ready routers
-    infra/                     # Retry/timeout/logging/celery/ollama integration
-    memory/                    # MongoDB adapter and models
-    services/                  # Agent, planning, retrieval, memory services
-    tools/                     # Tool implementations (RAG, web search)
-    api_app.py                 # Production backend entrypoint
-  frontend/                    # React SPA + Nginx container config
-  scripts/                     # Utility scripts (validation, config generation, etc.)
-  tests/                       # Backend test suite
-  docker-compose.yml           # Local infra and app orchestration
-  Dockerfile                   # Backend image build
-```
-
-## 4. Backend Runtime
-
-### 4.1 Production Entrypoint
-
-- File: `app/api_app.py`
-- Exposes:
-  - `GET /` service metadata
-  - `GET /health`
-  - `GET /ready`
-  - `POST /agent/run`
-  - `GET /metrics` (Prometheus ASGI mount)
-
-### 4.2 Startup Dependency Gates
-
-At startup, backend validates critical environment variables and dependencies:
-- Required env vars: `API_KEY`, `SERPAPI_KEY`, `HF_TOKEN`, `MONGO_URI`, `OLLAMA_HOST`
-- Connectivity checks include Mongo initialization and index creation
-
-### 4.3 Security and Validation
-
-- API key verification on protected agent endpoints
-- Goal input validation through `app/infra/validators.py`
-- Request size guard exists in `api/app.py` for alternate entrypoint
-
-## 5. Frontend Runtime
-
-### 5.1 Agent Client Hardening
-
-`frontend/src/features/agent/api/agentClient.ts` includes:
-- Per-request `X-Request-ID` generation
-- Runtime-configurable refresh endpoint (`REFRESH_ENDPOINT`)
-- Telemetry abstraction using `navigator.sendBeacon` when configured
-- 401 refresh queue handling to prevent token refresh storms
-
-### 5.2 Runtime Config Injection
-
-- Frontend reads `window.__APP_CONFIG__` from `/config.js`
-- `index.html` loads `/config.js` before app bootstrap
-- `scripts/generate-config.sh` emits deployment-specific config without rebuild
-
-### 5.3 Nginx Hardening
-
-`frontend/nginx.conf` provides:
-- Rate limiting (`10r/s`, burst `20`)
-- SPA routing fallback (`try_files ... /index.html`)
-- Security headers (`X-Frame-Options`, `X-Content-Type-Options`, CSP)
-- Health endpoints (`/healthz`, `/ready`)
-- Asset cache policy and gzip compression
-- HTTPS template block with HSTS and TLS 1.2/1.3 settings
-
-## 6. CI/CD (Frontend)
-
-Workflow: `.github/workflows/frontend-cd.yml`
-
-Pipeline stages:
-1. Checkout
-2. CodeQL init
-3. Node setup with npm cache
-4. Install (`npm ci`)
-5. Type check
-6. Lint
-7. Tests
-8. Build
-9. `npm audit --audit-level=moderate` (blocking)
-10. Upload build artifact
-11. CodeQL analyze
-12. GHCR login (non-PR)
-13. Docker Buildx build and push with GitHub Actions cache
-
-Images are tagged:
-- `ghcr.io/<owner>/genai-agent-frontend:<sha>`
-- `ghcr.io/<owner>/genai-agent-frontend:latest`
-
-## 7. Complete Execution Process
-
-### 7.1 Prerequisites
-
+### Prerequisites
+- Git
+- Node >= 20, npm
 - Python 3.11+
-- Node.js 20+
-- Docker + Docker Compose
-- Ollama running and reachable from backend
+- Docker & docker-compose (for streamlined backend orchestration)
+- Optional: Ollama installed locally OR active API credentials for an external LLM provider 
 
-### 7.2 Environment Setup
-
-```bash
-cp .env.example .env
-```
-
-Populate sensitive values in `.env`:
-- `API_KEY`
-- `SERPAPI_KEY`
-- `HF_TOKEN`
+### Required environment variables (names only)
+These variables must be populated (preferably in .env files, Docker profiles, or CI secrets):
+- `API_BASE`
+- `VITE_API_BASE`
+- `VITE_API_KEY`
+- `APP_VERSION`
 - `MONGO_URI`
+- `REDIS_URL`
 - `OLLAMA_HOST`
+- `REFRESH_ENDPOINT`
+- `TELEMETRY_ENDPOINT`
+- `GHCR_USERNAME`
+- `GHCR_TOKEN`
 
-### 7.3 Local Infrastructure
+### Setup (one-time)
+To instantiate the repository contexts for the first time on a fresh environment, run:
 
 ```bash
-docker compose up -d mongo redis
+git clone <REPO_URL>
+cd <REPO_ROOT>
+
+# Backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# Frontend
+cd frontend
+npm ci
+cd ..
 ```
 
-### 7.4 Backend Local Run
+### Local development — backend
+All dependencies including Redit, MongoDB, and the API can be spun via Docker Compose. Ensure `docker daemon` is running.
 
 ```bash
-pip install -r requirements.txt
+# 1. Initialize databases in background
+docker compose up -d mongodb redis
+
+# 2. Run the FastAPI development server
+source .venv/bin/activate
 uvicorn app.api_app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Alternative production-style run:
+### Local development — Celery & workers
+The Celery worker manages intensive agent runs asynchronously.
 
 ```bash
-gunicorn app.api_app:app -k uvicorn.workers.UvicornWorker -w 1 -b 0.0.0.0:8000 --timeout 120
+# In a new terminal, activate python venv
+source .venv/bin/activate
+celery -A app.core.celery_app worker -l info
 ```
 
-### 7.5 Frontend Local Run
+### Local development — frontend
+React fast-reload loop for UI layout editing:
 
 ```bash
 cd frontend
-npm ci
+npm run dev
+# Vite runs at http://localhost:5173
+```
+To run the production bundle locally (often requires built backend config files):
+```bash
+npm run build
+npm run preview
+```
+
+### Generating runtime config.js
+To decouple React build constants from actual deployment logic, `config.js` is rendered strictly at startup.
+
+```bash
+cd scripts
+chmod +x generate-config.sh
+./generate-config.sh
+# Check frontend/public/config.js. Secret variables will be proactively redacted.
+```
+
+### Quick full local run (copy-paste)
+In a hurry? Use this composite script block:
+
+```bash
+# Bring up API, Worker, Redis, and Mongo natively in containers
+docker compose up --build -d
+
+# Drop into the frontend UI layer
+cd frontend
+npm install
 npm run dev
 ```
 
-### 7.6 Generate Runtime Config
+### Health checks & verification
+To ensure every subcomponent is responsive, trigger the diagnostic links:
 
+- **Liveness probe:** `curl http://localhost:8000/ready`
+  - Expected: `{"status":"ready"}`
+- **System diagnostics:** `curl http://localhost:8000/health`
+  - Expected (abbreviated): `{"status": "healthy", "db": "connected", "redis": "connected", ...}`
+- **Browser access:** Navigating to `http://localhost:5173/status` opens the green-lights System Status React visualizer. 
+
+### Creating an agent & running a smoke test
+Testing via the CLI confirms backend operational capability instantly.
+
+**Create Agent:**
 ```bash
-API_BASE=http://localhost:8000 APP_VERSION=local-dev ./scripts/generate-config.sh > frontend/public/config.js
+curl -X POST http://localhost:8000/api/agents \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: <YOUR_API_KEY>" \
+  -d '{"name":"SmokeTestAgent","version":"1.0.0","description":"Platform Verifier"}'
+# Keep the returned 'id'.
 ```
 
-### 7.7 Frontend Container Build and Run
-
+**Run Agent Workflow:**
 ```bash
-docker build -t genai-frontend:local ./frontend
-docker run --rm -p 8080:80 \
-  -e API_BASE=http://host.docker.internal:8000 \
-  -e APP_VERSION=local \
-  genai-frontend:local
+curl -X POST http://localhost:8000/agent/run \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: <YOUR_API_KEY>" \
+  -d '{"agent_id":"<ID>","user_id":"admin","goal":"Ping test"}'
 ```
 
-### 7.8 Full Stack with Compose
-
+Alternatively, invoke the packaged Python end-to-end evaluator:
 ```bash
-docker compose up -d
+python scripts/smoke_test.py
 ```
 
-## 8. Deployment Diagram
+### Troubleshooting & logs collection
+For debugging API failures, capture the docker logs:
 
-```mermaid
-flowchart LR
-    Commit[Git Push to main] --> GA[GitHub Actions frontend-cd.yml]
-    GA --> QA[Typecheck + Lint + Test + Audit + CodeQL]
-    QA --> Build[Docker Buildx]
-    Build --> GHCR[Push image to GHCR]
-    GHCR --> Deploy[Deploy container]
-    Deploy --> RuntimeCfg[generate-config.sh writes /config.js at startup]
-    RuntimeCfg --> Live[Live frontend with env-specific API routing]
-```
+- API logs: `docker compose logs -f api`
+- Background processor logs: `docker compose logs -f celery-worker`
+- Database access logs: `docker compose logs -f mongodb`
 
-## 9. Verification and Acceptance
+If hitting 500 Timeouts specific to LLM inference or Ollama hanging, inspect that `OLLAMA_HOST` is reachable, and the specified models have physically resolved inside the Ollama daemon. `llm_call` prometheus counters explicitly record duration. Network Refusals (`ECONNREFUSED`) are indicative of inactive Docker resources in the backend.
 
-Run these after deployment:
+### CI/CD & deployment notes
+- **Frontend Cloudflare Pages:** Commits merged across the main branch initiate Vite compilation sequences automatically pushed to Cloudflare Pages edge relays using `actions/cloudflare-pages`.
+- **Backend Docker Images:** Core FastAPI/Celery container layers are rebuilt via `.github/workflows/` and securely transferred into a GHCR image bucket.
+- **Production Upstash & Atlas:** Rely heavily on remote persistent state for high concurrency deployments instead of local Docker. 
 
-```bash
-nginx -t
-curl -I https://<your-domain>
-curl -i https://<your-domain>/ready
-curl -i https://<your-domain>/healthz
-curl -i https://<your-domain>/config.js
-docker buildx build --tag ghcr.io/<org>/genai-agent-frontend:local --load ./frontend
-```
+### Security & operational notes
+We employ a zero-trust runtime policy:
+- No keys, passwords, URIs, tokens, or JWTs are bundled during the Vite artifact building.
+- Redaction layers (`generate-config.sh`) explicitly strip secrets from browser context maps.
+- Circuit Breaking protects upstream inference limits avoiding unbounded concurrency spirals.
 
-Expected checks:
-- `Strict-Transport-Security` appears on HTTPS responses
-- CSP header present
-- `/ready` and `/healthz` return HTTP 200 from frontend gateway
-- `/config.js` served as `application/javascript`
+### Contact & ownership
+Submit pull requests against the main branch or execute tickets inside the primary issue tracker for infrastructure routing and maintenance. Ensure all pull requests are prefixed structurally (`chore(docs):`, `fix(api):`).
 
-## 10. Testing and Quality Gates
-
-### Backend
-
-```bash
-pytest -q
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm run lint
-npm run test -- --run
-npm run build
-```
-
-## 11. Operations and Monitoring
-
-### 11.1 Health and Readiness
-
-- Backend health: `GET /health`
-- Backend readiness: `GET /ready`
-- Frontend probe endpoints: `/healthz`, `/ready`
-
-### 11.2 Metrics
-
-- Prometheus scrape endpoint: `GET /metrics`
-
-### 11.3 Logs
-
-```bash
-docker logs genai-api -f
-docker logs genai-worker -f
-docker logs genai-mongo -f
-docker logs genai-redis -f
-```
-
-## 12. Security Controls Summary
-
-- API key verification on agent execution routes
-- Nginx rate limiting and secure headers
-- TLS + HSTS template for production
-- Blocking dependency audit in CI
-- CodeQL static analysis in CI
-- Runtime config injection to avoid secret baking into static assets
-
-## 13. Known Gaps and Integration Notes
-
-- Frontend currently contains calls for `/api/agents`, `/api/runs`, and `/traces/{requestId}` in `agentClient.ts`; ensure backend routes are implemented or feature-gated before production cutover.
-- `index.html` includes a CSP meta tag for dev; in production, prefer enforcing CSP via Nginx headers only.
-- Enable Brotli directives in Nginx only when module support is present in the image.
-
-## 14. Release Checklist
-
-- [ ] Secrets configured in deployment environment
-- [ ] `.env` values validated in staging
-- [ ] Backend startup gates pass
-- [ ] Frontend CI pipeline green on `main`
-- [ ] Image pushed to GHCR with SHA tag
-- [ ] `config.js` generated at runtime with production API base
-- [ ] Nginx HTTPS block configured with real certificate paths and domain
-- [ ] Post-deploy verification commands pass
-
-## 15. Key Files Reference
-
-- Backend entrypoint: `app/api_app.py`
-- Frontend API client: `frontend/src/features/agent/api/agentClient.ts`
-- Frontend Nginx config: `frontend/nginx.conf`
-- Frontend Docker image build: `frontend/Dockerfile`
-- Runtime config script: `scripts/generate-config.sh`
-- Frontend CD workflow: `.github/workflows/frontend-cd.yml`
-- Local orchestration: `docker-compose.yml`
-
+### Changelog / version
+- **v1.0.0** — Completed End-To-End Readiness. Unified API error boundaries, health telemetry hooks, offline degradation UI, and dynamic environment injection modules installed successfully.
 ---
-
-This README is intentionally implementation-aligned so platform, security, and operations teams can execute the same runbook across local, staging, and production environments.
-

@@ -6,17 +6,23 @@ import { Play, Square, Terminal, Settings, Copy, Check, Info } from 'lucide-reac
 import { cn } from '../shared/lib/utils';
 import { StatusBanner } from '../shared/ui/StatusBanner';
 
+const createSessionId = () => `session_${Math.random().toString(36).slice(2, 7)}`;
+
 export const PlaygroundPage = () => {
     const [goal, setGoal] = useState('');
-    const [sessionId, setSessionId] = useState(`session_${Math.random().toString(36).slice(2, 7)}`);
+    const [sessionId, setSessionId] = useState(createSessionId);
     const [output, setOutput] = useState<{ text: string; role: 'user' | 'agent' }[]>([]);
     const [isCopied, setIsCopied] = useState(false);
+    const [topP, setTopP] = useState(0.6);
+    const [maxTokens, setMaxTokens] = useState(2048);
 
     const scrollRef = useRef<HTMLDivElement>(null);
     const runAgent = useRunAgent();
-    const { data: health } = useHealth();
+    const { data: health, isError: isHealthError } = useHealth();
 
-    const isSystemDegraded = !health || health.status !== 'ok';
+    const normalizedHealth = String(health?.status || '').toLowerCase();
+    const isSystemDegraded = !!health && (normalizedHealth !== 'ok' && normalizedHealth !== 'healthy');
+    const isExecutionDisabled = isHealthError;
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -25,7 +31,7 @@ export const PlaygroundPage = () => {
     }, [output]);
 
     const handleRun = async () => {
-        if (!goal.trim() || isSystemDegraded) return;
+        if (!goal.trim() || isExecutionDisabled) return;
 
         trackEvent('agent_run_started', { goal });
 
@@ -40,7 +46,11 @@ export const PlaygroundPage = () => {
                 setOutput(prev => [...prev, { text: data.result, role: 'agent' as const }]);
             },
             onError: (error: any) => {
-                setOutput(prev => [...prev, { text: `Error: ${error.message}`, role: 'agent' as const }]);
+                const message = error?.message || 'Unknown API error';
+                const extra = error?.status === 401
+                    ? ' (check VITE_API_KEY/API_KEY match)'
+                    : '';
+                setOutput(prev => [...prev, { text: `Error: ${message}${extra}`, role: 'agent' as const }]);
             }
         });
     };
@@ -54,10 +64,16 @@ export const PlaygroundPage = () => {
 
     return (
         <div className="h-[calc(100vh-8rem)] flex flex-col gap-6">
-            {isSystemDegraded && (
+            {isHealthError && (
                 <StatusBanner
                     type="error"
-                    message={`System Degradation: ${health?.model || 'LLM Service'} is currently unreachable. Playground execution is disabled.`}
+                    message="Backend API is unreachable. Verify API_BASE/CORS and that backend is running on port 8000."
+                />
+            )}
+            {isSystemDegraded && !isHealthError && (
+                <StatusBanner
+                    type="error"
+                    message={`System Degradation: ${health?.model || 'LLM Service'} is currently unreachable. You can still run, but responses may fail until LLM is up.`}
                 />
             )}
             <div className="flex items-center justify-between">
@@ -148,7 +164,7 @@ export const PlaygroundPage = () => {
                                 <Button
                                     className="h-12 w-12 rounded-full p-0 flex items-center justify-center"
                                     onClick={handleRun}
-                                    disabled={!goal.trim() || runAgent.isPending || isSystemDegraded}
+                                    disabled={!goal.trim() || runAgent.isPending || isExecutionDisabled}
                                     isLoading={runAgent.isPending}
                                 >
                                     <Play size={20} fill="currentColor" />
@@ -190,9 +206,18 @@ export const PlaygroundPage = () => {
 
                             <div className="space-y-2">
                                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Top-P Sampling</label>
-                                <input type="range" className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
+                                <input
+                                    type="range"
+                                    min={0}
+                                    max={1}
+                                    step={0.05}
+                                    value={topP}
+                                    onChange={(event) => setTopP(Number(event.target.value))}
+                                    className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                                />
                                 <div className="flex justify-between text-[10px] text-slate-400 font-mono">
                                     <span>0.0</span>
+                                    <span>{topP.toFixed(2)}</span>
                                     <span>1.0</span>
                                 </div>
                             </div>
@@ -200,14 +225,22 @@ export const PlaygroundPage = () => {
                             <div className="space-y-2">
                                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Max Tokens</label>
                                 <div className="flex items-center gap-2">
-                                    <input type="number" defaultValue={2048} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm" />
+                                    <input
+                                        type="number"
+                                        value={maxTokens}
+                                        min={256}
+                                        max={8192}
+                                        step={128}
+                                        onChange={(event) => setMaxTokens(Number(event.target.value))}
+                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm"
+                                    />
                                 </div>
                             </div>
                         </div>
 
                         <div className="pt-6 border-t border-slate-100">
                             <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 italic text-xs text-blue-700 leading-relaxed">
-                                "This playground connects directly to the active Ollama model defined in your system health."
+                                Session ID is sent to backend memory. Top-P and Max Tokens are UI presets for upcoming server-side tuning support.
                             </div>
                         </div>
                     </div>

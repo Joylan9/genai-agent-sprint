@@ -5,7 +5,7 @@ import { RunsListPage } from './pages/Runs';
 import { RunDetailsPage } from './pages/RunDetails';
 import { PlaygroundPage } from './pages/Playground';
 import { AppShell } from './app/layout/AppShell';
-import { SystemStatusPage } from './app/monitoring/SystemStatus';
+import { SystemStatusPage } from './app/monitoring/SystemStatusPage';
 
 const App = () => {
   return (

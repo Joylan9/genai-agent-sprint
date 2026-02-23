@@ -2,9 +2,12 @@
 Health endpoint checks basic connectivity.
 """
 
+import os
+
 from fastapi import APIRouter
 from ..memory.database import MongoDB
 from ollama import list as ollama_list
+from ..infra.ollama_client import get_ollama_model
 
 router = APIRouter()
 
@@ -16,6 +19,15 @@ async def health():
 
         ollama_list()
 
-        return {"status": "healthy"}
+        return {
+            "status": "ok",
+            "model": get_ollama_model(),
+            "version": os.getenv("APP_VERSION", "1.0.0"),
+        }
     except Exception as e:
-        return {"status": "unhealthy", "error": str(e)}
+        return {
+            "status": "degraded",
+            "model": get_ollama_model(),
+            "version": os.getenv("APP_VERSION", "1.0.0"),
+            "error": str(e),
+        }

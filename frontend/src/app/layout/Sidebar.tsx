@@ -61,7 +61,7 @@ export const Sidebar = () => {
                 isCollapsed ? 'w-16' : 'w-64'
             )}
         >
-            <div className="flex items-center gap-3 px-4 h-16 border-bottom mb-4">
+            <div className="flex items-center gap-3 px-4 h-16 border-b border-slate-200 dark:border-slate-800 mb-4">
                 <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center shrink-0">
                     <Activity size={20} className="text-white" />
                 </div>
@@ -90,14 +90,14 @@ export const Sidebar = () => {
             </div>
 
             {/* User Info */}
-            <div className="px-5 py-6 bg-slate-50/50 border-t border-slate-100">
+            <div className="px-5 py-6 bg-slate-50/50 border-t border-slate-100 dark:bg-slate-900 dark:border-slate-800">
                 <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold shrink-0">
                         A
                     </div>
                     {!isCollapsed && (
                         <div className="min-w-0">
-                            <p className="text-sm font-semibold text-slate-900 truncate">Admin User</p>
+                            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">Admin User</p>
                             <p className="text-[10px] text-blue-600 uppercase font-bold tracking-widest">Master Node</p>
                         </div>
                     )}

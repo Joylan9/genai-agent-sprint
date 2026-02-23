@@ -9,7 +9,7 @@ interface AppShellProps {
 
 export const AppShell = ({ children }: AppShellProps) => {
     return (
-        <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
+        <div className="flex h-screen bg-slate-50 overflow-hidden font-sans dark:bg-slate-950">
             {/* Persistent Sidebar */}
             <Sidebar />
 
@@ -19,7 +19,7 @@ export const AppShell = ({ children }: AppShellProps) => {
                 <TopNav />
 
                 {/* Scrollable Main Content */}
-                <main className="flex-1 overflow-auto">
+                <main className="flex-1 overflow-auto dark:bg-slate-950">
                     <div className="p-8 pb-16 max-w-7xl mx-auto">
                         {children}
                     </div>

@@ -1,0 +1,8 @@
+# Smoke Test Summary - FAIL
+
+*   **Frontend Check:** FAIL — The frontend dev server at `localhost:5173` is unreachable from within the isolated Docker testing environment (`host.docker.internal` resolution failed).
+*   **Backend Check:** PASS — API is responding on port 8000. `/health` passes, but `/ready` and `/metrics` need routing updates.
+*   **Dependency DBs:** PASS — MongoDB and Redis containers are healthy and accepting connections with ~4-18ms ping.
+*   **Dependency LLMs:** PASS — Ollama host was successfully pinged, verifying the `llama3` model is active.
+*   **E2E API Test:** FAIL — `/agent/run` threw a 404. Validation routes need to be correctly registered in the FastAPI app.
+*   **Remediations needed:** 3 prioritized next steps detailed below to resolve routing, container caching, and frontend proxying.

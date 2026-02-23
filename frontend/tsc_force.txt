@@ -1,0 +1,8 @@
+﻿src/app/errors/QueryErrorFallback.tsx(3,10): error TS1484: 'FallbackProps' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/app/errors/QueryErrorFallback.tsx(7,23): error TS18046: 'error' is of type 'unknown'.
+src/app/errors/QueryErrorFallback.tsx(7,74): error TS18046: 'error' is of type 'unknown'.
+src/app/errors/QueryErrorFallback.tsx(28,22): error TS18046: 'error' is of type 'unknown'.
+src/app/errors/QueryErrorFallback.tsx(30,30): error TS18046: 'error' is of type 'unknown'.
+src/app/monitoring/SystemStatusPage.tsx(1,1): error TS6133: 'React' is declared but its value is never read.
+src/app/monitoring/SystemStatusPage.tsx(4,28): error TS2307: Cannot find module '../../components/Feedback/PageLoader' or its corresponding type declarations.
+src/app/telemetry/telemetryMiddleware.ts(20,17): error TS6133: 'data' is declared but its value is never read.

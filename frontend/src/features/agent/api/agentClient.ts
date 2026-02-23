@@ -18,18 +18,23 @@ declare global {
             FRONTEND_HEALTH_ENDPOINT?: string;
             REFRESH_ENDPOINT?: string;
             TELEMETRY_ENDPOINT?: string;
+            ENABLE_AUTH_REFRESH?: string;
         };
     }
 }
 
 function getRuntimeConfig() {
     const cfg = (typeof window !== "undefined" && window.__APP_CONFIG__) || {};
+    const isLocal = typeof window !== 'undefined'
+        && ['localhost', '127.0.0.1'].includes(window.location.hostname);
+    const fallbackLocalApiKey = isLocal ? 'supersecretkey' : undefined;
     return {
         API_BASE_URL: cfg.VITE_API_BASE || import.meta.env.VITE_API_BASE || 'http://localhost:8000',
-        API_KEY: cfg.VITE_API_KEY || import.meta.env.VITE_API_KEY,
+        API_KEY: cfg.VITE_API_KEY || import.meta.env.VITE_API_KEY || fallbackLocalApiKey,
         APP_VERSION: cfg.APP_VERSION || '0.0.0-LOCAL',
         REFRESH_ENDPOINT: cfg.REFRESH_ENDPOINT || '/api/auth/refresh',
-        TELEMETRY_ENDPOINT: cfg.TELEMETRY_ENDPOINT || undefined
+        TELEMETRY_ENDPOINT: cfg.TELEMETRY_ENDPOINT || undefined,
+        ENABLE_AUTH_REFRESH: (cfg.ENABLE_AUTH_REFRESH || import.meta.env.VITE_ENABLE_AUTH_REFRESH || 'false') === 'true',
     };
 }
 
@@ -39,6 +44,7 @@ const API_KEY = runtime.API_KEY;
 const APP_VERSION = runtime.APP_VERSION;
 const REFRESH_ENDPOINT = runtime.REFRESH_ENDPOINT;
 const TELEMETRY_ENDPOINT = runtime.TELEMETRY_ENDPOINT;
+const ENABLE_AUTH_REFRESH = runtime.ENABLE_AUTH_REFRESH;
 
 class AgentClient {
     public instance: AxiosInstance;
@@ -48,7 +54,7 @@ class AgentClient {
     constructor() {
         this.instance = axios.create({
             baseURL: API_BASE_URL,
-            timeout: 60000,
+            timeout: 150000,
             withCredentials: true,
             headers: {
                 'Content-Type': 'application/json',
@@ -63,11 +69,16 @@ class AgentClient {
         // Request interceptor for API Key and per-request Correlation ID
         this.instance.interceptors.request.use(
             (config: InternalAxiosRequestConfig) => {
+                config.headers = config.headers ?? {};
                 if (API_KEY) {
                     config.headers['X-API-KEY'] = API_KEY;
                 }
-                // Generate a unique X-Request-ID per outgoing request
-                config.headers['X-Request-ID'] = crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+                const requestId = (
+                    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+                )
+                    ? crypto.randomUUID()
+                    : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+                config.headers['X-Request-ID'] = requestId;
                 return config;
             },
             (error) => Promise.reject(this.normalizeError(error))
@@ -83,8 +94,12 @@ class AgentClient {
             },
             async (error: AxiosError) => {
                 const originalRequest = error.config as any;
+                const shouldRefresh =
+                    ENABLE_AUTH_REFRESH
+                    && !!originalRequest
+                    && !String(originalRequest?.url || '').includes(REFRESH_ENDPOINT);
 
-                if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
+                if (error.response?.status === 401 && shouldRefresh && !originalRequest._retry) {
                     if (this.isRefreshing) {
                         return new Promise((resolve, reject) => {
                             this.failedQueue.push({ resolve, reject });
@@ -163,10 +178,13 @@ class AgentClient {
     private normalizeError(error: any): ApiError {
         if (axios.isAxiosError(error)) {
             const data = error.response?.data as any;
+            const message = data?.detail || data?.message || error.message;
             return {
                 status: error.response?.status || 500,
                 code: data?.code || error.code,
-                message: data?.detail || data?.message || error.message,
+                message: message === 'Network Error'
+                    ? 'Network Error (check backend URL, API key, and CORS settings)'
+                    : message,
                 details: data?.details || null,
             };
         }
@@ -193,12 +211,24 @@ class AgentClient {
         return this.instance.get(`/traces/${requestId}`);
     }
 
-    async listAgents(): Promise<any[]> {
-        return this.instance.get('/api/agents');
+    async listAgents(query?: string): Promise<any[]> {
+        return this.instance.get('/api/agents', {
+            params: query ? { q: query } : undefined
+        });
     }
 
-    async listRuns(): Promise<any[]> {
-        return this.instance.get('/api/runs');
+    async createAgent(agent: { name: string; version?: string; description?: string }): Promise<any> {
+        return this.instance.post('/api/agents', agent);
+    }
+
+    async updateAgent(agentId: string, updates: { name?: string; version?: string; description?: string }): Promise<any> {
+        return this.instance.patch(`/api/agents/${agentId}`, updates);
+    }
+
+    async listRuns(filters?: { q?: string; status?: string }): Promise<any[]> {
+        return this.instance.get('/api/runs', {
+            params: filters
+        });
     }
 }
 

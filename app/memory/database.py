@@ -7,9 +7,10 @@ Production-safe, singleton async client. No side-effects at import time.
 
 import os
 from typing import Optional
+
+from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import ASCENDING
-from dotenv import load_dotenv
 
 # Load .env once (safe to call on import)
 load_dotenv()
@@ -17,6 +18,7 @@ load_dotenv()
 
 class MongoDB:
     """Singleton async Mongo client + DB accessor."""
+
     _client: Optional[AsyncIOMotorClient] = None
     _db = None
 
@@ -33,18 +35,16 @@ class MongoDB:
             if not mongo_uri or not db_name:
                 raise RuntimeError("MongoDB configuration missing in .env")
 
-            # Create client; this does not block
+            # Create client; this does not block.
             cls._client = AsyncIOMotorClient(mongo_uri)
             cls._db = cls._client[db_name]
 
         return cls._db
 
-    # ✅ ADDED — REQUIRED FOR TRACE INSERTS
     @classmethod
     def get_database(cls):
         """
-        Returns the database handle.
-        Ensures connection is initialized.
+        Return the database handle and initialize the connection if needed.
         """
         return cls.connect()
 
@@ -63,7 +63,11 @@ class MongoDB:
         await db.long_term_memory.create_index([("session_id", ASCENDING)])
         await db.long_term_memory.create_index([("created_at", ASCENDING)])
 
-        # ✅ ADDED — Trace collection indexes
+        # Trace collection indexes
         await db.traces.create_index([("request_id", ASCENDING)], unique=True)
         await db.traces.create_index([("session_id", ASCENDING)])
         await db.traces.create_index([("timestamp", ASCENDING)])
+
+        # Agent directory indexes
+        await db.agents.create_index([("name_lower", ASCENDING)], unique=True)
+        await db.agents.create_index([("created_at", ASCENDING)])

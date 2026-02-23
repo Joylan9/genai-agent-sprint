@@ -15,11 +15,21 @@ def get_agent():
         _agent = build_agent()
     return _agent
 
-# API Key verification
-API_KEY = os.getenv("API_KEY", "supersecretkey")
+def _enforce_api_key() -> bool:
+    """
+    Local/dev default is relaxed auth for faster setup.
+    Set ENFORCE_API_KEY=true in production.
+    """
+    raw = os.getenv("ENFORCE_API_KEY", "false").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
 
 def verify_api_key(x_api_key: str = Header(None)):
-    if x_api_key != API_KEY:
+    if not _enforce_api_key():
+        return
+
+    api_key = os.getenv("API_KEY", "supersecretkey")
+    if x_api_key != api_key:
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 @router.post("/run", response_model=AgentResponse)

@@ -5,7 +5,8 @@ import App from './App.tsx';
 import { AppProviders } from './app/providers/AppProviders';
 
 async function enableMocking() {
-  if (import.meta.env.MODE !== 'development') {
+  const useMsw = import.meta.env.VITE_USE_MSW === 'true';
+  if (import.meta.env.MODE !== 'development' || !useMsw) {
     return;
   }
 
@@ -15,12 +16,16 @@ async function enableMocking() {
   });
 }
 
+import { ErrorBoundary } from './app/errors/ErrorBoundary';
+
 enableMocking().then(() => {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      <AppProviders>
-        <App />
-      </AppProviders>
+      <ErrorBoundary>
+        <AppProviders>
+          <App />
+        </AppProviders>
+      </ErrorBoundary>
     </StrictMode>
   );
 });

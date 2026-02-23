@@ -1,6 +1,6 @@
-#!/usr/bin/env bash
-# generate-config.sh
-# Usage: REFRESH_ENDPOINT=/api/auth/refresh TELEMETRY_ENDPOINT=https://telemetry.example.com API_BASE=https://api.example.com ./generate-config.sh > frontend/public/config.js
+#!/usr/bin/env sh
+# frontend/scripts/generate-config.sh
+# Runtime config generator used by frontend Docker entrypoint.
 
 API_BASE="${API_BASE:-http://localhost:8000}"
 API_KEY="${API_KEY:-}"

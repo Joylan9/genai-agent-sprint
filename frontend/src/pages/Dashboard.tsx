@@ -5,8 +5,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Badge } from '../shared/ui/Badge';
 import { Skeleton } from '../shared/ui/Skeleton';
 import { Users, Activity, CheckCircle, Clock, Zap, Plus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export const Dashboard = () => {
+    const navigate = useNavigate();
     const { data: health } = useHealth();
     const { data: agents, isLoading: isLoadingAgents } = useAgents();
     const { data: runs, isLoading: isLoadingRuns } = useRuns();
@@ -25,7 +27,7 @@ export const Dashboard = () => {
                     <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
                     <p className="text-slate-500 mt-1">Welcome back. Here's what's happening with your agents.</p>
                 </div>
-                <Button className="space-x-2">
+                <Button className="space-x-2" onClick={() => navigate('/agents?create=1')}>
                     <Plus size={18} />
                     <span>New Agent</span>
                 </Button>
@@ -63,13 +65,13 @@ export const Dashboard = () => {
                                 <>
                                     <div className="flex items-center justify-between text-sm">
                                         <span className="text-slate-500 font-medium">API Status:</span>
-                                        <Badge variant={health.status === 'ok' ? 'green' : 'red'}>
+                                        <Badge variant={['ok', 'healthy'].includes(String(health.status).toLowerCase()) ? 'green' : 'red'}>
                                             {health.status}
                                         </Badge>
                                     </div>
                                     <div className="flex items-center justify-between text-sm">
                                         <span className="text-slate-500 font-medium">Version:</span>
-                                        <span className="text-slate-900 font-bold">{health.version}</span>
+                                        <span className="text-slate-900 font-bold">{health.version || 'N/A'}</span>
                                     </div>
                                     <div className="flex items-center justify-between text-sm">
                                         <span className="text-slate-500 font-medium">Model:</span>
@@ -101,7 +103,7 @@ export const Dashboard = () => {
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                         <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                             <h2 className="text-lg font-semibold text-slate-900">Recent Agents</h2>
-                            <Button variant="ghost" size="sm">View All</Button>
+                            <Button variant="ghost" size="sm" onClick={() => navigate('/agents')}>View All</Button>
                         </div>
                         <Table>
                             <TableHeader>

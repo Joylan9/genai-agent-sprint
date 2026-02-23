@@ -5,12 +5,16 @@ FastAPI entrypoint for the Enterprise AI Agent Engine.
 
 import os
 from dotenv import load_dotenv
+from datetime import datetime, timezone
+from uuid import uuid4
 
 # Load .env into environment as early as possible
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException, Header, Depends, Request, Response
+from fastapi import FastAPI, HTTPException, Header, Depends, Request, Response, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 from api.schemas import AgentRequest, AgentResponse
 from api.dependencies import build_agent
 from app.infra.validators import InputValidator
@@ -23,6 +27,27 @@ app = FastAPI(
     title="Enterprise AI Agent Engine",
     version="1.0.0",
     description="Production-ready AI agent with routing, reliability, and hybrid search."
+)
+
+
+def _allowed_origins() -> list[str]:
+    configured = os.getenv("CORS_ORIGINS", "").strip()
+    if configured:
+        return [origin.strip() for origin in configured.split(",") if origin.strip()]
+    return [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
+    ]
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_allowed_origins(),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # ============================================================
@@ -74,9 +99,6 @@ async def startup_event():
     print("✅ Agent built and ready.")
 
 
-# Load API key from environment (now that load_dotenv ran)
-API_KEY = os.getenv("API_KEY", "supersecretkey")
-
 # Maximum allowed request size (currently 1KB for testing)
 MAX_REQUEST_SIZE = 1000
 # MAX_REQUEST_SIZE = 1 * 1024 * 1024  # 1MB for production
@@ -110,9 +132,32 @@ async def limit_request_size(request: Request, call_next):
 # ============================================================
 # API KEY DEPENDENCY
 # ============================================================
+def _enforce_api_key() -> bool:
+    raw = os.getenv("ENFORCE_API_KEY", "false").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
 def verify_api_key(x_api_key: str = Header(None)):
-    if x_api_key != API_KEY:
+    if not _enforce_api_key():
+        return
+
+    api_key = os.getenv("API_KEY", "supersecretkey")
+    if x_api_key != api_key:
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
+
+class AgentCreateRequest(BaseModel):
+    name: str = Field(..., min_length=3, max_length=100)
+    version: str = Field(default="1.0.0", min_length=1, max_length=20)
+    description: str | None = Field(default=None, max_length=1000)
+
+
+def _as_iso(ts):
+    if isinstance(ts, datetime):
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        return ts.isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 @app.get("/health")
@@ -190,6 +235,104 @@ async def get_trace(
     trace["_id"] = str(trace["_id"])
 
     return trace
+
+
+@app.get("/api/agents")
+async def list_agents(
+    q: str | None = Query(default=None),
+    _: None = Depends(verify_api_key),
+):
+    db = MongoDB.get_database()
+    query = {}
+    if q:
+        query["name"] = {"$regex": q, "$options": "i"}
+
+    cursor = db.agents.find(query).sort("created_at", -1)
+    docs = await cursor.to_list(length=200)
+    return [
+        {
+            "id": str(doc.get("_id")),
+            "name": doc.get("name", ""),
+            "version": doc.get("version", "1.0.0"),
+            "description": doc.get("description"),
+            "status": doc.get("status", "active"),
+            "created_at": _as_iso(doc.get("created_at")),
+        }
+        for doc in docs
+    ]
+
+
+@app.post("/api/agents", status_code=201)
+async def create_agent(
+    payload: AgentCreateRequest,
+    _: None = Depends(verify_api_key),
+):
+    db = MongoDB.get_database()
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Agent name is required")
+
+    duplicate = await db.agents.find_one({"name_lower": name.lower()})
+    if duplicate:
+        raise HTTPException(status_code=409, detail="Agent with this name already exists")
+
+    doc = {
+        "_id": str(uuid4()),
+        "name": name,
+        "name_lower": name.lower(),
+        "version": payload.version.strip() or "1.0.0",
+        "description": payload.description,
+        "status": "active",
+        "created_at": datetime.now(timezone.utc),
+    }
+    await db.agents.insert_one(doc)
+    return {
+        "id": doc["_id"],
+        "name": doc["name"],
+        "version": doc["version"],
+        "description": doc["description"],
+        "status": doc["status"],
+        "created_at": _as_iso(doc["created_at"]),
+    }
+
+
+@app.get("/api/runs")
+async def list_runs(
+    q: str | None = Query(default=None),
+    status: str = Query(default="all"),
+    _: None = Depends(verify_api_key),
+):
+    db = MongoDB.get_database()
+    traces = await db.traces.find({}).sort("timestamp", -1).to_list(length=500)
+
+    runs = []
+    for trace in traces:
+        if not trace.get("request_id"):
+            continue
+
+        run_status = "completed" if trace.get("final_answer") else "failed"
+        run = {
+            "id": trace.get("request_id"),
+            "agent_id": trace.get("agent_id") or trace.get("session_id") or "default",
+            "status": run_status,
+            "started_at": _as_iso(trace.get("timestamp")),
+            "completed_at": _as_iso(trace.get("timestamp")),
+            "result": trace.get("final_answer") if isinstance(trace.get("final_answer"), str) else None,
+        }
+        runs.append(run)
+
+    if status and status != "all":
+        runs = [run for run in runs if run["status"] == status]
+
+    if q:
+        needle = q.lower().strip()
+        runs = [
+            run for run in runs
+            if needle in str(run.get("id", "")).lower()
+            or needle in str(run.get("agent_id", "")).lower()
+        ]
+
+    return runs
 
 
 @app.post("/agent/run", response_model=AgentResponse)

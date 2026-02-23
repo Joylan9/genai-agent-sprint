@@ -28,7 +28,17 @@ export const useAgents = () => {
 export const useCreateAgent = () => {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: (newAgent: any) => agentClient.instance.post('/api/agents', newAgent),
+        mutationFn: (newAgent: any) => agentClient.createAgent(newAgent),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['agents'] });
+        },
+    });
+};
+
+export const useUpdateAgent = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, updates }: { id: string, updates: any }) => agentClient.updateAgent(id, updates),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['agents'] });
         },

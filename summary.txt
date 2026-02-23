@@ -1,0 +1,6 @@
+Smoke Test Summary - FAIL
+Frontend: FAIL
+Backend: PASS
+DBs: Mongo=FAIL | Redis=FAIL
+E2E Test: FAIL
+Remediations needed: 1
