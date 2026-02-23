@@ -3,10 +3,19 @@ Readiness endpoint checks system readiness.
 """
 
 from fastapi import APIRouter
-from ..registry.tool_registry import ToolRegistry
+from ..memory.database import MongoDB
 
 router = APIRouter()
 
 @router.get("/ready")
 async def ready():
-    return {"status": "ready"}
+    status = "ready"
+    checks = {"mongodb": "unavailable"}
+    try:
+        db = MongoDB.get_database()
+        await db.command("ping")
+        checks["mongodb"] = "ready"
+    except Exception:
+        status = "degraded"
+        
+    return {"status": status, "checks": checks}
