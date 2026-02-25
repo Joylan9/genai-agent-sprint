@@ -71,3 +71,11 @@ class MongoDB:
         # Agent directory indexes
         await db.agents.create_index([("name_lower", ASCENDING)], unique=True)
         await db.agents.create_index([("created_at", ASCENDING)])
+
+        # Users collection indexes (Phase 3: Auth)
+        await db.users.create_index([("email", ASCENDING)], unique=True)
+        await db.users.create_index([("created_at", ASCENDING)])
+
+        # Run events collection indexes (Phase 2: SSE)
+        await db.run_events.create_index([("run_id", ASCENDING)])
+        await db.run_events.create_index([("timestamp", ASCENDING)])

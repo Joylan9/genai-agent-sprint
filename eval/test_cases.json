@@ -1,0 +1,78 @@
+[
+    {
+        "id": "eval-001",
+        "goal": "What is machine learning?",
+        "expected_tools": [
+            "rag_search"
+        ],
+        "expected_keywords": [
+            "algorithms",
+            "data",
+            "patterns",
+            "learn"
+        ],
+        "category": "knowledge",
+        "difficulty": "easy"
+    },
+    {
+        "id": "eval-002",
+        "goal": "Latest news about AI regulation in the EU",
+        "expected_tools": [
+            "web_search"
+        ],
+        "expected_keywords": [
+            "regulation",
+            "EU",
+            "policy",
+            "artificial intelligence"
+        ],
+        "category": "current_events",
+        "difficulty": "medium"
+    },
+    {
+        "id": "eval-003",
+        "goal": "Explain the difference between supervised and unsupervised learning with examples",
+        "expected_tools": [
+            "rag_search"
+        ],
+        "expected_keywords": [
+            "supervised",
+            "unsupervised",
+            "labeled",
+            "clustering"
+        ],
+        "category": "knowledge",
+        "difficulty": "medium"
+    },
+    {
+        "id": "eval-004",
+        "goal": "What are transformer architectures and why are they important for NLP?",
+        "expected_tools": [
+            "rag_search"
+        ],
+        "expected_keywords": [
+            "transformer",
+            "attention",
+            "NLP",
+            "BERT",
+            "GPT"
+        ],
+        "category": "knowledge",
+        "difficulty": "medium"
+    },
+    {
+        "id": "eval-005",
+        "goal": "Find the current stock price of NVIDIA and recent AI chip developments",
+        "expected_tools": [
+            "web_search"
+        ],
+        "expected_keywords": [
+            "NVIDIA",
+            "GPU",
+            "chip",
+            "stock"
+        ],
+        "category": "current_events",
+        "difficulty": "hard"
+    }
+]

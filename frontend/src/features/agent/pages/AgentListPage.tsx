@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Filter, Plus, RefreshCw, Search } from 'lucide-react';
 import { TableSkeleton } from '../../../shared/ui/TableSkeleton';
-import { useAgents, useCreateAgent, useUpdateAgent } from '../hooks/useAgent';
+import { useAgents, useCreateAgent, useUpdateAgent, useDeleteAgent } from '../hooks/useAgent';
 import { Button } from '../../../shared/ui/Button';
 import { Input } from '../../../shared/ui/Input';
 import { Modal } from '../../../shared/ui/Modal';
@@ -40,6 +40,7 @@ export const AgentListPage = () => {
     const { data: agents, isLoading, refetch } = useAgents();
     const createAgent = useCreateAgent();
     const updateAgent = useUpdateAgent();
+    const deleteAgentMutation = useDeleteAgent();
     const navigate = useNavigate();
     const [editingAgent, setEditingAgent] = useState<AgentRecord | null>(null);
 
@@ -215,9 +216,21 @@ export const AgentListPage = () => {
                                         {agent.status || 'active'}
                                     </span>
                                 </TableCell>
-                                <TableCell className="text-right">
+                                <TableCell className="text-right space-x-1">
                                     <Button variant="ghost" size="sm" onClick={() => handleEdit(agent)}>Edit</Button>
                                     <Button variant="ghost" size="sm" className="text-blue-600" onClick={() => handleDeploy(agent)}>Deploy</Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-red-500 hover:text-red-700"
+                                        onClick={() => {
+                                            if (window.confirm(`Delete agent "${agent.name}"? This cannot be undone.`)) {
+                                                deleteAgentMutation.mutate(agent.id);
+                                            }
+                                        }}
+                                    >
+                                        Delete
+                                    </Button>
                                 </TableCell>
                             </TableRow>
                         ))}
@@ -269,7 +282,6 @@ export const AgentListPage = () => {
                         <label htmlFor="agent-description" className="text-sm font-medium text-slate-700">Description</label>
                         <textarea
                             id="agent-description"
-                            name="description"
                             className="w-full min-h-[100px] rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                             placeholder="What does this agent do?"
                             {...register('description')}

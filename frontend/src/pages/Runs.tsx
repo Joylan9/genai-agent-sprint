@@ -98,6 +98,7 @@ export const RunsListPage = () => {
                             <TableHead>Run ID</TableHead>
                             <TableHead>Agent</TableHead>
                             <TableHead>Status</TableHead>
+                            <TableHead>Latency</TableHead>
                             <TableHead>Started At</TableHead>
                             <TableHead className="text-right">Result</TableHead>
                         </TableRow>
@@ -108,7 +109,17 @@ export const RunsListPage = () => {
                                 <TableCell className="font-mono text-xs text-slate-600">{run.id}</TableCell>
                                 <TableCell className="font-medium text-slate-900">Agent {run.agent_id}</TableCell>
                                 <TableCell>
-                                    <StatusBadge status={run.status} />
+                                    <div className="flex items-center gap-1.5">
+                                        <StatusBadge status={run.status} />
+                                        {run.cache_hit && (
+                                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200" title="Served from cache">
+                                                ⚡ Cache
+                                            </span>
+                                        )}
+                                    </div>
+                                </TableCell>
+                                <TableCell className="text-slate-500 text-xs font-mono">
+                                    {run.latency_total != null ? `${run.latency_total.toFixed(2)}s` : '-'}
                                 </TableCell>
                                 <TableCell className="text-slate-500 text-xs text-nowrap">
                                     {run.started_at ? new Date(run.started_at).toLocaleString() : '-'}

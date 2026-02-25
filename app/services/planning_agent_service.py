@@ -71,7 +71,7 @@ class PlanningAgentService:
     # PLAN CREATION
     # ============================================================
 
-    async def create_plan(self, goal: str) -> str:
+    async def create_plan(self, goal: str, session_id: str = None) -> str:
         # ---------- Validate input BEFORE planner ----------
         # Hard-block on injection attempts or invalid input
         self.guardrails.validate_user_input(goal)
@@ -79,6 +79,42 @@ class PlanningAgentService:
         available_tools = ", ".join(
             self.registry.list_tools() if self.registry else []
         )
+
+        # ---------- Memory-Informed Planning (Phase 4) ----------
+        # Retrieve past context so the planner can reason over history
+        memory_context = ""
+        if session_id:
+            try:
+                context = await self.memory.retrieve_context(
+                    session_id=session_id,
+                    query=goal,
+                    recent_limit=5,
+                    semantic_limit=3,
+                )
+                recent = context.get("recent_messages", [])
+                relevant = context.get("relevant_memory", [])
+
+                parts = []
+                if recent:
+                    convo = "\n".join(
+                        f"  {m.get('role', 'user')}: {m.get('content', '')[:200]}"
+                        for m in recent[-3:]
+                    )
+                    parts.append(f"Recent conversation:\n{convo}")
+                if relevant:
+                    memories = "\n".join(
+                        f"  - {m.get('text', '')[:200]}" for m in relevant[:2]
+                    )
+                    parts.append(f"Relevant past knowledge:\n{memories}")
+
+                if parts:
+                    memory_context = (
+                        "\n\nCONTEXT FROM MEMORY (use this to inform your plan):\n"
+                        + "\n".join(parts)
+                    )
+            except Exception:
+                # If memory fails, continue without it
+                memory_context = ""
 
         messages = [
             {
@@ -101,6 +137,8 @@ Rules:
 - Use only listed tool names
 - No markdown
 - No explanations
+- Use context from memory when relevant to refine queries
+{memory_context}
 """
             },
             {"role": "user", "content": goal},

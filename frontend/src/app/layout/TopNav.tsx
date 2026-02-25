@@ -1,4 +1,4 @@
-import { Bell, Command, Moon, Search, Sun } from 'lucide-react';
+import { Bell, Command, Moon, Search, Sun, Server } from 'lucide-react';
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -14,11 +14,27 @@ function getInitialTheme() {
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
+// Derive environment from URL or env variable
+function getEnvironment(): 'LOCAL' | 'STAGING' | 'PRODUCTION' {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') return 'LOCAL';
+    if (host.includes('staging') || host.includes('dev')) return 'STAGING';
+    return 'PRODUCTION';
+}
+
+const ENV_STYLES = {
+    LOCAL: 'bg-amber-500/10 text-amber-600 border-amber-500/20 dark:text-amber-400',
+    STAGING: 'bg-blue-500/10 text-blue-600 border-blue-500/20 dark:text-blue-400',
+    PRODUCTION: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400',
+};
+
 export const TopNav = () => {
     const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState('');
     const [isDarkMode, setIsDarkMode] = useState(getInitialTheme);
     const { data: health } = useHealth();
+
+    const env = useMemo(() => getEnvironment(), []);
 
     const normalizedHealth = useMemo(
         () => (health?.status || '').toLowerCase(),
@@ -67,7 +83,17 @@ export const TopNav = () => {
                 </form>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
+                {/* Environment Badge */}
+                <div className={cn(
+                    'flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[10px] font-bold uppercase tracking-wider',
+                    ENV_STYLES[env]
+                )}>
+                    <Server size={10} />
+                    {env}
+                </div>
+
+                {/* System Status */}
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-100 dark:bg-slate-800 dark:border-slate-700">
                     <span className={cn(
                         'h-2 w-2 rounded-full',
@@ -78,7 +104,7 @@ export const TopNav = () => {
                     </span>
                 </div>
 
-                <div className="h-8 w-px bg-slate-200 mx-2 dark:bg-slate-700" />
+                <div className="h-8 w-px bg-slate-200 mx-1 dark:bg-slate-700" />
 
                 <Button
                     variant="ghost"

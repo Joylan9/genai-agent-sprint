@@ -48,6 +48,29 @@ export interface Run {
 export interface Trace {
     _id: string;
     request_id: string;
-    steps: any[];
-    metadata: Record<string, any>;
+    session_id?: string;
+    goal?: string;
+    plan?: string;
+    steps?: any[];
+    observations?: Array<{
+        step: number;
+        tool: string;
+        query: string;
+        response: {
+            status: string;
+            data: any;
+            metadata?: Record<string, any>;
+        };
+    }>;
+    final_answer?: string;
+    cache_hit?: boolean;
+    latency?: {
+        planner: number;
+        tool_total: number;
+        tool_wall_time: number;
+        synthesis: number;
+        total: number;
+    };
+    timestamp?: string;
+    metadata?: Record<string, any>;
 }

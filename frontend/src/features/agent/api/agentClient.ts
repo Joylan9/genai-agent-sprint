@@ -230,6 +230,100 @@ class AgentClient {
             params: filters
         });
     }
+
+    async getAgent(agentId: string): Promise<any> {
+        return this.instance.get(`/api/agents/${agentId}`);
+    }
+
+    async deleteAgent(agentId: string): Promise<void> {
+        return this.instance.delete(`/api/agents/${agentId}`);
+    }
+
+    async deleteRun(requestId: string): Promise<void> {
+        return this.instance.delete(`/api/runs/${requestId}`);
+    }
+
+    // ============================================================
+    // Async Run Submission (Celery-backed)
+    // ============================================================
+
+    async submitRun(request: { session_id: string; goal: string }): Promise<{ run_id: string; status: string }> {
+        return this.instance.post('/api/runs/submit', request);
+    }
+
+    async pollRunStatus(runId: string): Promise<{
+        run_id: string;
+        status: string;
+        goal?: string;
+        result?: string;
+        error?: string;
+        started_at?: string;
+        completed_at?: string;
+        cache_hit?: boolean;
+        latency_total?: number;
+    }> {
+        return this.instance.get(`/api/runs/${runId}/status`);
+    }
+
+    // ============================================================
+    // Authentication (Phase 3)
+    // ============================================================
+
+    setAuthToken(token: string | null) {
+        if (token) {
+            this.instance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        } else {
+            delete this.instance.defaults.headers.common['Authorization'];
+        }
+    }
+
+    async login(email: string, password: string): Promise<any> {
+        return this.instance.post('/api/auth/login', { email, password });
+    }
+
+    async register(email: string, password: string, name: string): Promise<any> {
+        return this.instance.post('/api/auth/register', { email, password, name });
+    }
+
+    async refreshToken(refreshToken: string): Promise<any> {
+        return this.instance.post('/api/auth/refresh', { refresh_token: refreshToken });
+    }
+
+    async getMe(): Promise<any> {
+        return this.instance.get('/api/auth/me');
+    }
+
+    // ============================================================
+    // Evaluation (Phase 5)
+    // ============================================================
+
+    async runEvalSuite(suiteName: string = 'default'): Promise<any> {
+        return this.instance.post('/api/eval/run-suite', { suite_name: suiteName });
+    }
+
+    async getEvalResults(): Promise<any[]> {
+        return this.instance.get('/api/eval/results');
+    }
+
+    async getEvalResult(suiteId: string): Promise<any> {
+        return this.instance.get(`/api/eval/results/${suiteId}`);
+    }
+
+    // ============================================================
+    // Password Reset / OTP
+    // ============================================================
+
+    async requestOtp(email: string): Promise<any> {
+        return this.instance.post('/api/auth/request-otp', { email });
+    }
+
+    async verifyOtp(email: string, otp: string): Promise<any> {
+        return this.instance.post('/api/auth/verify-otp', { email, otp });
+    }
+
+    async resetPassword(resetToken: string, newPassword: string): Promise<any> {
+        return this.instance.post('/api/auth/reset-password', { reset_token: resetToken, new_password: newPassword });
+    }
 }
 
 export const agentClient = new AgentClient();

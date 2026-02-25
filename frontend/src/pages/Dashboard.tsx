@@ -109,8 +109,8 @@ export const Dashboard = () => {
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Agent Name</TableHead>
-                                    <TableHead>Provider</TableHead>
-                                    <TableHead>Model</TableHead>
+                                    <TableHead>Version</TableHead>
+                                    <TableHead>Status</TableHead>
                                     <TableHead>Created</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -128,10 +128,10 @@ export const Dashboard = () => {
                                     agents?.slice(0, 5).map((agent: any) => (
                                         <TableRow key={agent.id}>
                                             <TableCell className="font-medium text-slate-900">{agent.name}</TableCell>
+                                            <TableCell className="font-mono text-xs text-slate-500">v{agent.version}</TableCell>
                                             <TableCell>
-                                                <Badge variant="blue">{agent.provider}</Badge>
+                                                <Badge variant="green">{agent.status}</Badge>
                                             </TableCell>
-                                            <TableCell className="text-slate-500 font-mono text-xs">{agent.model}</TableCell>
                                             <TableCell className="text-slate-500 text-xs">
                                                 {new Date(agent.created_at).toLocaleDateString()}
                                             </TableCell>

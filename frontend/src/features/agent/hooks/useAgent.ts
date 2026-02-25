@@ -69,3 +69,23 @@ export const useTrace = (requestId: string) => {
         enabled: !!requestId,
     });
 };
+
+export const useDeleteAgent = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (agentId: string) => agentClient.deleteAgent(agentId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['agents'] });
+        },
+    });
+};
+
+export const useDeleteRun = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (requestId: string) => agentClient.deleteRun(requestId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['runs'] });
+        },
+    });
+};

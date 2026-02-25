@@ -19,6 +19,9 @@ from app.infra.logger import REQUEST_COUNTER, REQUEST_LATENCY
 from app.memory.database import MongoDB
 from app.observability.health import router as health_router
 from app.observability.readiness import router as readiness_router
+from app.api.stream import router as stream_router
+from app.api.auth import router as auth_router
+from app.api.eval import router as eval_router
 import app.tools.rag_search_tool
 import app.tools.web_search_tool
 import app.tools.tools
@@ -78,6 +81,9 @@ app.include_router(health_router)
 app.include_router(readiness_router)
 app.include_router(agent_router)
 app.include_router(platform_router)
+app.include_router(stream_router)
+app.include_router(auth_router)
+app.include_router(eval_router)
 
 metrics_app = make_asgi_app()
 app.mount("/metrics", metrics_app)

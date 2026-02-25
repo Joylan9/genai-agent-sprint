@@ -46,7 +46,7 @@ async def run_agent(
             raise HTTPException(status_code=400, detail=str(e))
 
         # IMPORTANT: create_plan is now async
-        plan = await agent.create_plan(validated_goal)
+        plan = await agent.create_plan(validated_goal, session_id=request.session_id)
 
         execution_output = await agent.execute_plan(
             request.session_id,

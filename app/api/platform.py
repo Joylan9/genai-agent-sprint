@@ -66,20 +66,25 @@ def _to_agent_dto(doc: dict[str, Any]) -> dict[str, Any]:
 
 
 def _to_run_dto(trace: dict[str, Any]) -> dict[str, Any]:
-    final_answer = trace.get("final_answer")
-    status: Literal["pending", "running", "completed", "failed"]
-    if final_answer:
-        status = "completed"
+    # Prefer stored status (set by Celery tasks) over inferred status
+    stored_status = trace.get("status")
+    if stored_status in ("queued", "running", "completed", "failed"):
+        status = stored_status
     else:
-        status = "failed"
+        # Fallback for traces created before Celery integration
+        final_answer = trace.get("final_answer")
+        status = "completed" if final_answer else "failed"
 
     return {
         "id": trace.get("request_id"),
         "agent_id": trace.get("agent_id") or trace.get("session_id") or "default",
         "status": status,
-        "started_at": _as_iso(trace.get("timestamp")),
-        "completed_at": _as_iso(trace.get("timestamp")),
-        "result": final_answer if isinstance(final_answer, str) else None,
+        "started_at": _as_iso(trace.get("started_at") or trace.get("timestamp")),
+        "completed_at": _as_iso(trace.get("completed_at") or trace.get("timestamp")),
+        "result": trace.get("final_answer") if isinstance(trace.get("final_answer"), str) else None,
+        "cache_hit": trace.get("cache_hit", False),
+        "latency_total": (trace.get("latency") or {}).get("total"),
+        "goal": trace.get("goal"),
     }
 
 
@@ -156,6 +161,43 @@ async def update_agent(
     return _to_agent_dto(doc)
 
 
+@router.get("/api/agents/{agent_id}")
+async def get_agent(
+    agent_id: str,
+    _: None = Depends(verify_api_key),
+):
+    """Return a single agent by ID."""
+    db = MongoDB.get_database()
+    doc = await db.agents.find_one({"_id": agent_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return _to_agent_dto(doc)
+
+
+@router.delete("/api/agents/{agent_id}", status_code=204)
+async def delete_agent(
+    agent_id: str,
+    _: None = Depends(verify_api_key),
+):
+    """Delete an agent from the catalog."""
+    db = MongoDB.get_database()
+    result = await db.agents.delete_one({"_id": agent_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+
+@router.delete("/api/runs/{request_id}", status_code=204)
+async def delete_run(
+    request_id: str,
+    _: None = Depends(verify_api_key),
+):
+    """Delete a run trace by request_id."""
+    db = MongoDB.get_database()
+    result = await db.traces.delete_one({"request_id": request_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+
 @router.get("/api/runs")
 async def list_runs(
     q: str | None = Query(default=None, description="Run id/session search"),
@@ -196,6 +238,90 @@ async def get_trace(
     if "timestamp" in trace:
         trace["timestamp"] = _as_iso(trace["timestamp"])
     return trace
+
+
+# ============================================================
+# ASYNC RUN SUBMISSION (Celery-backed)
+# ============================================================
+
+class RunSubmitRequest(BaseModel):
+    session_id: str = Field(..., min_length=3, max_length=100)
+    goal: str = Field(..., min_length=1, max_length=5000)
+
+
+@router.post("/api/runs/submit", status_code=202)
+async def submit_run(
+    payload: RunSubmitRequest,
+    _: None = Depends(verify_api_key),
+):
+    """
+    Enqueue an agent execution as a background Celery task.
+    Returns immediately with run_id; poll /api/runs/{id}/status for progress.
+    """
+    from app.tasks.agent_tasks import execute_agent_run
+
+    db = MongoDB.get_database()
+    run_id = str(uuid4())
+
+    # Create trace document with status=queued
+    await db.traces.insert_one({
+        "request_id": run_id,
+        "session_id": payload.session_id,
+        "goal": payload.goal,
+        "status": "queued",
+        "plan": None,
+        "steps": [],
+        "observations": [],
+        "final_answer": None,
+        "cache_hit": False,
+        "latency": {},
+        "timestamp": datetime.now(timezone.utc),
+    })
+
+    # Enqueue Celery task
+    execute_agent_run.delay(run_id, payload.session_id, payload.goal)
+
+    return {
+        "run_id": run_id,
+        "status": "queued",
+        "message": "Agent execution enqueued. Poll /api/runs/{run_id}/status for progress.",
+    }
+
+
+@router.get("/api/runs/{run_id}/status")
+async def get_run_status(
+    run_id: str,
+    _: None = Depends(verify_api_key),
+):
+    """
+    Poll the current status of an async run.
+    Returns: status, result (if completed), error (if failed).
+    """
+    db = MongoDB.get_database()
+    trace = await db.traces.find_one({"request_id": run_id})
+    if not trace:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    status = trace.get("status", "unknown")
+    response: dict[str, Any] = {
+        "run_id": run_id,
+        "status": status,
+        "goal": trace.get("goal"),
+        "started_at": _as_iso(trace.get("started_at") or trace.get("timestamp")),
+    }
+
+    if status == "completed":
+        response["result"] = trace.get("final_answer")
+        response["completed_at"] = _as_iso(trace.get("completed_at"))
+        response["cache_hit"] = trace.get("cache_hit", False)
+        latency = trace.get("latency") or {}
+        response["latency_total"] = latency.get("total")
+    elif status == "failed":
+        response["error"] = trace.get("error")
+        response["completed_at"] = _as_iso(trace.get("completed_at"))
+
+    return response
+
 
 @router.get("/api/feature-flags")
 async def get_feature_flags():
