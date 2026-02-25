@@ -4,6 +4,7 @@ import { Button } from '../shared/ui/Button';
 import { Badge } from '../shared/ui/Badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../shared/ui/Table';
 import { Play, CheckCircle2, XCircle, Clock, BarChart3, RefreshCw, Zap } from 'lucide-react';
+import { EmptyState } from '../shared/ui/EmptyState';
 
 interface EvalCase {
     case_id: string;
@@ -129,7 +130,7 @@ export const EvalPage = () => {
                         <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
                             <p className="text-xs text-slate-500 uppercase tracking-wider">Overall Score</p>
                             <p className={`text-3xl font-bold mt-1 ${activeResult.avg_score >= 70 ? 'text-green-600' :
-                                    activeResult.avg_score >= 40 ? 'text-amber-600' : 'text-red-600'
+                                activeResult.avg_score >= 40 ? 'text-amber-600' : 'text-red-600'
                                 }`}>
                                 {activeResult.avg_score.toFixed(1)}%
                             </p>
@@ -190,7 +191,7 @@ export const EvalPage = () => {
                                         </TableCell>
                                         <TableCell>
                                             <span className={`font-bold ${r.score >= 70 ? 'text-green-600' :
-                                                    r.score >= 40 ? 'text-amber-600' : 'text-red-600'
+                                                r.score >= 40 ? 'text-amber-600' : 'text-red-600'
                                                 }`}>
                                                 {r.score.toFixed(0)}%
                                             </span>
@@ -254,12 +255,15 @@ export const EvalPage = () => {
             )}
 
             {!activeResult && !loading && suiteHistory.length === 0 && (
-                <div className="bg-white border-2 border-dashed border-slate-200 rounded-xl p-16 text-center">
-                    <BarChart3 size={48} className="text-slate-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-slate-600 mb-2">No evaluations yet</h3>
-                    <p className="text-sm text-slate-400 mb-4">
-                        Click "Run Test Suite" to execute your first agent evaluation benchmark.
-                    </p>
+                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                    <EmptyState
+                        icon={BarChart3}
+                        title="No evaluations yet"
+                        description='Click "Run Test Suite" to execute your first agent evaluation benchmark and measure quality, accuracy, and performance.'
+                        actionLabel="Run Test Suite"
+                        onAction={runSuite}
+                        accentColor="purple"
+                    />
                 </div>
             )}
         </div>

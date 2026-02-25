@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useRunAgent, useHealth } from '../features/agent/hooks/useAgent';
 import { trackEvent } from '../app/telemetry/tracker';
 import { Button } from '../shared/ui/Button';
-import { Play, Square, Terminal, Settings, Copy, Check, Info } from 'lucide-react';
+import { Play, Square, Terminal, Settings, Copy, Check, Info, AlertTriangle, Lightbulb } from 'lucide-react';
 import { cn } from '../shared/lib/utils';
 import { StatusBanner } from '../shared/ui/StatusBanner';
 
@@ -50,7 +50,15 @@ export const PlaygroundPage = () => {
                 const extra = error?.status === 401
                     ? ' (check VITE_API_KEY/API_KEY match)'
                     : '';
-                setOutput(prev => [...prev, { text: `Error: ${message}${extra}`, role: 'agent' as const }]);
+                const lower = message.toLowerCase();
+                const suggestion = lower.includes('timeout') ? 'Try simplifying the goal or increasing timeout'
+                    : lower.includes('ollama') || lower.includes('connection refused') ? 'Check that Ollama is running: ollama serve'
+                        : lower.includes('401') ? 'Verify API_KEY matches between frontend and backend'
+                            : 'Check backend logs for the full error trace';
+                setOutput(prev => [...prev, {
+                    text: `__ERROR__|${message}${extra}|${suggestion}`,
+                    role: 'agent' as const,
+                }]);
             }
         });
     };
@@ -120,19 +128,42 @@ export const PlaygroundPage = () => {
                                     <p>Ready for execution input...</p>
                                 </div>
                             ) : (
-                                output.map((msg, i) => (
-                                    <div key={i} className={cn(
-                                        "p-3 rounded-lg border",
-                                        msg.role === 'user'
-                                            ? "bg-slate-800/40 border-slate-700 text-blue-400"
-                                            : "bg-blue-500/5 border-blue-500/20 text-slate-300"
-                                    )}>
-                                        <div className="text-[10px] uppercase tracking-widest mb-1 opacity-50">
-                                            {msg.role}
+                                output.map((msg, i) => {
+                                    // Special rendering for error messages
+                                    if (msg.role === 'agent' && msg.text.startsWith('__ERROR__')) {
+                                        const parts = msg.text.split('|');
+                                        const errorMsg = parts[1] || 'Unknown error';
+                                        const suggestion = parts[2] || '';
+                                        return (
+                                            <div key={i} className="p-3 rounded-lg border border-red-500/30 bg-red-500/5">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <AlertTriangle size={14} className="text-red-400" />
+                                                    <span className="text-[10px] uppercase tracking-widest text-red-400 font-bold">Execution Error</span>
+                                                </div>
+                                                <p className="text-sm text-red-300 font-mono mb-2">{errorMsg}</p>
+                                                {suggestion && (
+                                                    <div className="flex items-start gap-2 text-xs text-amber-300/80 bg-amber-500/10 rounded px-2.5 py-2 border border-amber-500/20">
+                                                        <Lightbulb size={12} className="text-amber-400 mt-0.5 shrink-0" />
+                                                        <span>{suggestion}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    }
+                                    return (
+                                        <div key={i} className={cn(
+                                            "p-3 rounded-lg border",
+                                            msg.role === 'user'
+                                                ? "bg-slate-800/40 border-slate-700 text-blue-400"
+                                                : "bg-blue-500/5 border-blue-500/20 text-slate-300"
+                                        )}>
+                                            <div className="text-[10px] uppercase tracking-widest mb-1 opacity-50">
+                                                {msg.role}
+                                            </div>
+                                            <div className="whitespace-pre-wrap">{msg.text}</div>
                                         </div>
-                                        <div className="whitespace-pre-wrap">{msg.text}</div>
-                                    </div>
-                                ))
+                                    );
+                                })
                             )}
                             {runAgent.isPending && (
                                 <div className="flex items-center gap-2 text-blue-400">

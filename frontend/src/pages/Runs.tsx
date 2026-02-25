@@ -1,6 +1,7 @@
-import { Filter, Play, Search } from 'lucide-react';
+import { Activity, Filter, Play, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { EmptyState } from '../shared/ui/EmptyState';
 
 import { useRuns } from '../features/agent/hooks/useAgent';
 import { Button } from '../shared/ui/Button';
@@ -133,8 +134,15 @@ export const RunsListPage = () => {
                         ))}
                         {filteredRuns.length === 0 && !isLoading && (
                             <TableRow>
-                                <TableCell colSpan={5} className="h-32 text-center text-slate-400">
-                                    No runs found in history.
+                                <TableCell colSpan={6} className="border-0 p-0">
+                                    <EmptyState
+                                        icon={Activity}
+                                        title={searchTerm ? 'No runs match your search' : 'No execution history yet'}
+                                        description={searchTerm ? 'Try a different search term or clear your filters.' : 'Execute an agent from the Playground to see run history and trace data here.'}
+                                        actionLabel={searchTerm ? undefined : 'Go to Playground'}
+                                        onAction={searchTerm ? undefined : () => navigate('/execute')}
+                                        accentColor="green"
+                                    />
                                 </TableCell>
                             </TableRow>
                         )}

@@ -3,7 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Filter, Plus, RefreshCw, Search } from 'lucide-react';
+import { Bot, Filter, Plus, RefreshCw, Search } from 'lucide-react';
+import { EmptyState } from '../../../shared/ui/EmptyState';
 import { TableSkeleton } from '../../../shared/ui/TableSkeleton';
 import { useAgents, useCreateAgent, useUpdateAgent, useDeleteAgent } from '../hooks/useAgent';
 import { Button } from '../../../shared/ui/Button';
@@ -236,11 +237,19 @@ export const AgentListPage = () => {
                         ))}
                         {filteredAgents.length === 0 && !isLoading && (
                             <TableRow>
-                                <TableCell colSpan={5} className="h-32 text-center text-slate-500">
-                                    <div className="flex flex-col items-center justify-center space-y-2">
-                                        <p className="font-medium text-slate-600">No agents found matching your search.</p>
-                                        <p className="text-xs">Try a different search term or create a new agent.</p>
-                                    </div>
+                                <TableCell colSpan={5} className="border-0 p-0">
+                                    <EmptyState
+                                        icon={Bot}
+                                        title={query ? 'No agents match your search' : 'No agents created yet'}
+                                        description={query ? 'Try a different search term or clear your filters.' : 'Create your first AI agent to start orchestrating intelligent workflows.'}
+                                        actionLabel={query ? undefined : 'Create Agent'}
+                                        onAction={query ? undefined : () => {
+                                            setEditingAgent(null);
+                                            reset({ name: '', version: '1.0.0', description: '' });
+                                            setIsModalManuallyOpen(true);
+                                        }}
+                                        accentColor="blue"
+                                    />
                                 </TableCell>
                             </TableRow>
                         )}

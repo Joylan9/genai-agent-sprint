@@ -1,10 +1,12 @@
-import { Bell, Command, Moon, Search, Sun, Server } from 'lucide-react';
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { Command, Moon, Search, Sun, Zap, CheckCircle2, XCircle, X } from 'lucide-react';
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useHealth } from '../../features/agent/hooks/useAgent';
 import { Button } from '../../shared/ui/Button';
 import { cn } from '../../shared/lib/utils';
+import { ActivityDrawer } from './ActivityDrawer';
+import { agentClient } from '../../features/agent/api/agentClient';
 
 function getInitialTheme() {
     if (typeof window === 'undefined') return false;
@@ -33,8 +35,51 @@ export const TopNav = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [isDarkMode, setIsDarkMode] = useState(getInitialTheme);
     const { data: health } = useHealth();
+    const [drawerOpen, setDrawerOpen] = useState(false);
+    const [activeRunCount, setActiveRunCount] = useState(0);
+    const prevRunMap = useRef<Record<string, string>>({});
+    const [toasts, setToasts] = useState<{ id: string; message: string; type: 'success' | 'error' }[]>([]);
+    const toastTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
     const env = useMemo(() => getEnvironment(), []);
+
+    // Show toast notification
+    const showToast = useCallback((id: string, message: string, type: 'success' | 'error') => {
+        setToasts(prev => [...prev.slice(-2), { id, message, type }]); // keep max 3
+        toastTimeouts.current[id] = setTimeout(() => {
+            setToasts(prev => prev.filter(t => t.id !== id));
+            delete toastTimeouts.current[id];
+        }, 4000);
+    }, []);
+
+    // Poll active runs count + detect completions/failures
+    useEffect(() => {
+        const fetchCount = async () => {
+            try {
+                const runs = await agentClient.listRuns();
+                const all = runs || [];
+                setActiveRunCount(all.filter((r: any) => r.status === 'running' || r.status === 'queued').length);
+
+                // Detect state transitions
+                const newMap: Record<string, string> = {};
+                for (const r of all) {
+                    newMap[r.id] = r.status;
+                    const prevStatus = prevRunMap.current[r.id];
+                    if (prevStatus && (prevStatus === 'running' || prevStatus === 'queued')) {
+                        if (r.status === 'completed') {
+                            showToast(r.id, `Run ${r.id?.slice(0, 8)} completed`, 'success');
+                        } else if (r.status === 'failed') {
+                            showToast(r.id, `Run ${r.id?.slice(0, 8)} failed`, 'error');
+                        }
+                    }
+                }
+                prevRunMap.current = newMap;
+            } catch { /* ignore */ }
+        };
+        fetchCount();
+        const interval = setInterval(fetchCount, 8000);
+        return () => clearInterval(interval);
+    }, [showToast]);
 
     const normalizedHealth = useMemo(
         () => (health?.status || '').toLowerCase(),
@@ -89,7 +134,6 @@ export const TopNav = () => {
                     'flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[10px] font-bold uppercase tracking-wider',
                     ENV_STYLES[env]
                 )}>
-                    <Server size={10} />
                     {env}
                 </div>
 
@@ -106,6 +150,22 @@ export const TopNav = () => {
 
                 <div className="h-8 w-px bg-slate-200 mx-1 dark:bg-slate-700" />
 
+                {/* Activity Indicator — opens drawer */}
+                <button
+                    onClick={() => setDrawerOpen(true)}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-100 dark:bg-blue-950/30 dark:border-blue-900 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors relative"
+                >
+                    <Zap size={14} className="text-blue-500" />
+                    <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
+                        {activeRunCount > 0 ? `${activeRunCount} Active` : 'Activity'}
+                    </span>
+                    {activeRunCount > 0 && (
+                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center animate-pulse">
+                            {activeRunCount}
+                        </span>
+                    )}
+                </button>
+
                 <Button
                     variant="ghost"
                     size="sm"
@@ -119,11 +179,42 @@ export const TopNav = () => {
                         <Sun size={18} className="text-slate-600" />
                     )}
                 </Button>
+            </div>
 
-                <Button variant="ghost" size="sm" className="w-9 h-9 p-0 rounded-full relative" aria-label="Notifications">
-                    <Bell size={18} className="text-slate-600 dark:text-slate-300" />
-                    <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900" />
-                </Button>
+            <ActivityDrawer isOpen={drawerOpen} onClose={() => setDrawerOpen(false)} />
+
+            {/* Toast Notifications */}
+            <div className="fixed bottom-6 right-6 z-[60] flex flex-col gap-2 pointer-events-none">
+                {toasts.map(toast => (
+                    <div
+                        key={toast.id}
+                        className={cn(
+                            'flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-2xl border backdrop-blur-md pointer-events-auto',
+                            'animate-in slide-in-from-right-5 fade-in duration-300',
+                            toast.type === 'success'
+                                ? 'bg-emerald-50/90 dark:bg-emerald-950/90 border-emerald-200 dark:border-emerald-800'
+                                : 'bg-red-50/90 dark:bg-red-950/90 border-red-200 dark:border-red-800',
+                        )}
+                    >
+                        {toast.type === 'success' ? (
+                            <CheckCircle2 size={16} className="text-emerald-500" />
+                        ) : (
+                            <XCircle size={16} className="text-red-500" />
+                        )}
+                        <span className={cn(
+                            'text-sm font-medium',
+                            toast.type === 'success' ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300',
+                        )}>
+                            {toast.message}
+                        </span>
+                        <button
+                            onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
+                            className="ml-2 p-0.5 rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                        >
+                            <X size={12} className="text-slate-400" />
+                        </button>
+                    </div>
+                ))}
             </div>
         </header>
     );

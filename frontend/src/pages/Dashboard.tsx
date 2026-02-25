@@ -4,8 +4,9 @@ import { Button } from '../shared/ui/Button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../shared/ui/Table';
 import { Badge } from '../shared/ui/Badge';
 import { Skeleton } from '../shared/ui/Skeleton';
-import { Users, Activity, CheckCircle, Clock, Zap, Plus } from 'lucide-react';
+import { Users, Activity, CheckCircle, Clock, Zap, Plus, Bot } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { EmptyState } from '../shared/ui/EmptyState';
 
 export const Dashboard = () => {
     const navigate = useNavigate();
@@ -137,6 +138,21 @@ export const Dashboard = () => {
                                             </TableCell>
                                         </TableRow>
                                     ))
+                                )}
+                                {!isLoadingAgents && (!agents || agents.length === 0) && (
+                                    <TableRow>
+                                        <TableCell colSpan={4} className="border-0 p-0">
+                                            <EmptyState
+                                                icon={Bot}
+                                                title="No agents yet"
+                                                description="Create your first agent to get started."
+                                                actionLabel="Create Agent"
+                                                onAction={() => navigate('/agents?create=1')}
+                                                accentColor="blue"
+                                                className="py-8"
+                                            />
+                                        </TableCell>
+                                    </TableRow>
                                 )}
                             </TableBody>
                         </Table>

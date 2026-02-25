@@ -51,6 +51,8 @@ export interface Trace {
     session_id?: string;
     goal?: string;
     plan?: string;
+    status?: 'queued' | 'running' | 'completed' | 'failed' | string;
+    error?: string;
     steps?: any[];
     observations?: Array<{
         step: number;

@@ -1,4 +1,4 @@
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useTrace } from '../features/agent/hooks/useAgent';
 import { Button } from '../shared/ui/Button';
 import { Badge } from '../shared/ui/Badge';
@@ -7,6 +7,8 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { cn } from '../shared/lib/utils';
 import { useState } from 'react';
+import { RunTimeline } from '../shared/ui/RunTimeline';
+import { ErrorPanel } from '../shared/ui/ErrorPanel';
 
 // ============================================================
 // Trace Step Component — renders one observation from the trace
@@ -159,6 +161,7 @@ const LatencyBreakdown = ({ latency }: { latency: any }) => {
 // ============================================================
 export const RunDetailsPage = () => {
     const { id } = useParams<{ id: string }>();
+    const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState<'trace' | 'logs' | 'artifacts'>('trace');
 
     const { data: trace, isLoading, error } = useTrace(id || '');
@@ -219,6 +222,22 @@ export const RunDetailsPage = () => {
                     <p className="text-slate-900 mt-1">{trace.goal}</p>
                 </div>
             )}
+
+            {/* Error Panel for failed runs */}
+            {(trace?.status === 'failed' || trace?.error) && (
+                <ErrorPanel
+                    error={trace?.error || 'Unknown error'}
+                    goal={trace?.goal}
+                    onRetry={() => navigate(`/execute${trace?.goal ? `?goal=${encodeURIComponent(trace.goal)}` : ''}`)}
+                />
+            )}
+
+            {/* Execution Timeline */}
+            <RunTimeline
+                latency={latency}
+                observations={observations}
+                status={trace?.status}
+            />
 
             {/* Latency Breakdown */}
             <LatencyBreakdown latency={latency} />
