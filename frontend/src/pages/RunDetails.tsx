@@ -2,7 +2,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useTrace } from '../features/agent/hooks/useAgent';
 import { Button } from '../shared/ui/Button';
 import { Badge } from '../shared/ui/Badge';
-import { ChevronLeft, Clock, CheckCircle2, XCircle, FileJson, List, Info, Activity, Zap } from 'lucide-react';
+import { ChevronLeft, Clock, CheckCircle2, XCircle, FileJson, List, Info, Activity, Zap, Copy, Check } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { cn } from '../shared/lib/utils';
@@ -163,6 +163,7 @@ export const RunDetailsPage = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState<'trace' | 'logs' | 'artifacts'>('trace');
+    const [linkCopied, setLinkCopied] = useState(false);
 
     const { data: trace, isLoading, error } = useTrace(id || '');
 
@@ -212,6 +213,26 @@ export const RunDetailsPage = () => {
                         <Clock size={14} />
                         Started: {startedAt} • Duration: {totalDuration}
                     </p>
+                </div>
+                <div className="ml-auto flex items-center gap-2">
+                    <button
+                        onClick={() => {
+                            const url = `${window.location.origin}/runs/${id}`;
+                            navigator.clipboard.writeText(url).then(() => {
+                                setLinkCopied(true);
+                                setTimeout(() => setLinkCopied(false), 2000);
+                            });
+                        }}
+                        className={cn(
+                            'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
+                            linkCopied
+                                ? 'bg-emerald-50 border-emerald-200 text-emerald-600 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-400'
+                                : 'bg-white border-slate-200 text-slate-600 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-blue-950/30',
+                        )}
+                    >
+                        {linkCopied ? <Check size={12} /> : <Copy size={12} />}
+                        {linkCopied ? 'Copied!' : 'Share Run'}
+                    </button>
                 </div>
             </div>
 

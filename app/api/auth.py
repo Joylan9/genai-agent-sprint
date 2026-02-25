@@ -385,15 +385,26 @@ def _generate_otp() -> str:
     return f"{random.randint(100000, 999999)}"
 
 
+def _is_smtp_configured() -> bool:
+    """Check if SMTP is properly configured (not placeholder values)."""
+    if not SMTP_USER or not SMTP_PASS:
+        return False
+    placeholders = ["your-email", "your-16-char", "example.com", "changeme", "placeholder"]
+    for p in placeholders:
+        if p in SMTP_USER.lower() or p in SMTP_PASS.lower():
+            return False
+    return True
+
+
 def _send_otp_email(to_email: str, otp: str, user_name: str = "User") -> bool:
     """Send OTP via SMTP. Returns True on success."""
-    if not SMTP_USER or not SMTP_PASS:
+    if not _is_smtp_configured():
         # Dev fallback: log OTP to console when SMTP not configured
         print(f"\n{'='*50}")
-        print(f"  OTP for {to_email}: {otp}")
-        print(f"  (SMTP not configured — OTP printed to console)")
+        print(f"  DEV MODE — OTP for {to_email}: {otp}")
+        print(f"  (SMTP not configured — set real credentials in .env)")
         print(f"{'='*50}\n")
-        return True
+        return True  # Treat as success for dev flow
 
     try:
         msg = MIMEMultipart("alternative")
@@ -433,7 +444,7 @@ def _send_otp_email(to_email: str, otp: str, user_name: str = "User") -> bool:
 
         return True
     except Exception as e:
-        print(f"SMTP error: {e}")
+        print(f"SMTP error sending OTP to {to_email}: {e}")
         return False
 
 
@@ -473,12 +484,22 @@ async def request_otp(payload: OTPRequest):
 
     # Send email
     user_name = user.get("name", "User")
-    _send_otp_email(email, otp, user_name)
+    email_sent = _send_otp_email(email, otp, user_name)
 
-    return {
+    response = {
         "message": "If an account exists with this email, a verification code has been sent.",
         "expires_in": OTP_EXPIRY_MINUTES * 60,
     }
+
+    # In dev mode (SMTP not configured), include OTP in response so
+    # the frontend can show it directly — never do this in production!
+    if not _is_smtp_configured():
+        response["dev_otp"] = otp
+        response["dev_notice"] = "SMTP not configured. OTP returned in response for development."
+    elif not email_sent:
+        response["warning"] = "Email delivery may have failed. Check backend logs."
+
+    return response
 
 
 @router.post("/verify-otp")

@@ -139,10 +139,15 @@ export const TopNav = () => {
 
                 {/* System Status */}
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-100 dark:bg-slate-800 dark:border-slate-700">
-                    <span className={cn(
-                        'h-2 w-2 rounded-full',
-                        isHealthy ? 'bg-green-500 animate-pulse' : 'bg-red-500'
-                    )} />
+                    <span className="relative flex items-center justify-center">
+                        {isHealthy && (
+                            <span className="absolute h-4 w-4 rounded-full bg-green-400/40" style={{ animation: 'healthPulse 2.5s ease-in-out infinite' }} />
+                        )}
+                        <span className={cn(
+                            'relative h-2 w-2 rounded-full',
+                            isHealthy ? 'bg-green-500' : 'bg-red-500 animate-pulse'
+                        )} />
+                    </span>
                     <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
                         {isHealthy ? 'System Ready' : 'Dependency Alert'}
                     </span>

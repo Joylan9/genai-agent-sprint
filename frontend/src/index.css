@@ -48,3 +48,9 @@ html.dark .text-slate-500,
 html.dark .text-slate-400 {
   color: #94a3b8 !important;
 }
+
+/* System Health Pulse Animation */
+@keyframes healthPulse {
+  0%, 100% { transform: scale(1); opacity: 0.4; }
+  50% { transform: scale(1.8); opacity: 0; }
+}

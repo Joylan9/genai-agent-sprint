@@ -25,6 +25,7 @@ export const ForgotPasswordPage = () => {
     const [loading, setLoading] = useState(false);
     const [countdown, setCountdown] = useState(0);
     const [canResend, setCanResend] = useState(false);
+    const [devNotice, setDevNotice] = useState('');
 
     const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -43,11 +44,18 @@ export const ForgotPasswordPage = () => {
     const handleRequestOtp = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
+        setDevNotice('');
         setLoading(true);
         try {
-            await agentClient.requestOtp(email);
+            const res = await agentClient.requestOtp(email);
             setStep('otp');
             setCountdown(60);
+            // Dev mode: auto-fill OTP when SMTP is not configured
+            if (res?.dev_otp) {
+                const digits = String(res.dev_otp).split('');
+                setOtp(digits);
+                setDevNotice(`Dev mode: SMTP not configured. OTP auto-filled: ${res.dev_otp}`);
+            }
         } catch (err: any) {
             setError(err?.response?.data?.detail || err?.message || 'Failed to send code');
         } finally {
@@ -58,11 +66,18 @@ export const ForgotPasswordPage = () => {
     // ── Resend OTP ──
     const handleResend = async () => {
         setError('');
+        setDevNotice('');
         setLoading(true);
         try {
-            await agentClient.requestOtp(email);
+            const res = await agentClient.requestOtp(email);
             setCountdown(60);
             setOtp(['', '', '', '', '', '']);
+            // Dev mode: auto-fill OTP
+            if (res?.dev_otp) {
+                const digits = String(res.dev_otp).split('');
+                setOtp(digits);
+                setDevNotice(`Dev mode: SMTP not configured. OTP auto-filled: ${res.dev_otp}`);
+            }
         } catch (err: any) {
             setError(err?.message || 'Failed to resend');
         } finally {
@@ -157,10 +172,10 @@ export const ForgotPasswordPage = () => {
                         {steps.map((s, i) => (
                             <div key={s.id} className="flex items-center gap-2">
                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${i < currentStepIdx
-                                        ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
-                                        : i === currentStepIdx
-                                            ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30 scale-110'
-                                            : 'bg-white/[0.06] text-slate-600 border border-white/[0.08]'
+                                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                                    : i === currentStepIdx
+                                        ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30 scale-110'
+                                        : 'bg-white/[0.06] text-slate-600 border border-white/[0.08]'
                                     }`}>
                                     {i < currentStepIdx ? <CheckCircle2 size={14} /> : s.num}
                                 </div>
@@ -239,14 +254,21 @@ export const ForgotPasswordPage = () => {
                                         onChange={(e) => handleOtpChange(idx, e.target.value)}
                                         onKeyDown={(e) => handleOtpKeyDown(idx, e)}
                                         className={`w-12 h-14 text-center text-xl font-bold rounded-xl border transition-all duration-200 outline-none ${digit
-                                                ? 'bg-blue-500/10 border-blue-500/40 text-white shadow-lg shadow-blue-500/10'
-                                                : 'bg-white/[0.04] border-white/[0.1] text-white'
+                                            ? 'bg-blue-500/10 border-blue-500/40 text-white shadow-lg shadow-blue-500/10'
+                                            : 'bg-white/[0.04] border-white/[0.1] text-white'
                                             } focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20`}
                                     />
                                 ))}
                             </div>
 
                             {error && <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-2.5 mb-4 text-center">{error}</p>}
+
+                            {/* Dev mode notice */}
+                            {devNotice && (
+                                <div className="text-sm text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg p-2.5 mb-4 text-center">
+                                    ⚠️ {devNotice}
+                                </div>
+                            )}
 
                             <Button onClick={handleVerifyOtp} disabled={loading || otp.join('').length < 6} className="w-full h-11 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold rounded-xl flex items-center justify-center gap-2 mb-4">
                                 {loading ? <RefreshCw size={16} className="animate-spin" /> : <><span>Verify Code</span><ArrowRight size={16} /></>}
@@ -320,8 +342,8 @@ export const ForgotPasswordPage = () => {
                                     <div className="flex gap-1">
                                         {[1, 2, 3, 4].map(i => (
                                             <div key={i} className={`h-1 flex-1 rounded-full transition-all ${newPassword.length >= i * 3
-                                                    ? newPassword.length >= 12 ? 'bg-emerald-500' : newPassword.length >= 8 ? 'bg-amber-500' : 'bg-red-500'
-                                                    : 'bg-white/[0.06]'
+                                                ? newPassword.length >= 12 ? 'bg-emerald-500' : newPassword.length >= 8 ? 'bg-amber-500' : 'bg-red-500'
+                                                : 'bg-white/[0.06]'
                                                 }`} />
                                         ))}
                                     </div>

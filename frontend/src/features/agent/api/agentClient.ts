@@ -314,15 +314,18 @@ class AgentClient {
     // ============================================================
 
     async requestOtp(email: string): Promise<any> {
-        return this.instance.post('/api/auth/request-otp', { email });
+        const res = await this.instance.post('/api/auth/request-otp', { email });
+        return res.data;
     }
 
     async verifyOtp(email: string, otp: string): Promise<any> {
-        return this.instance.post('/api/auth/verify-otp', { email, otp });
+        const res = await this.instance.post('/api/auth/verify-otp', { email, otp });
+        return res.data;
     }
 
     async resetPassword(resetToken: string, newPassword: string): Promise<any> {
-        return this.instance.post('/api/auth/reset-password', { reset_token: resetToken, new_password: newPassword });
+        const res = await this.instance.post('/api/auth/reset-password', { reset_token: resetToken, new_password: newPassword });
+        return res.data;
     }
 }
 
