@@ -52,9 +52,12 @@ export const TopNav = () => {
                 <form onSubmit={onSearchSubmit} className="relative group">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-blue-500 transition-colors" size={18} />
                     <input
+                        id="nav-search"
+                        name="nav-search"
                         value={searchTerm}
                         onChange={(event) => setSearchTerm(event.target.value)}
                         placeholder="Search agents..."
+                        aria-label="Search agents"
                         className="w-64 pl-10 pr-14 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 hover:bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
                     />
                     <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 border border-slate-200 rounded px-1.5 py-0.5 bg-white text-[10px] text-slate-400 dark:bg-slate-800 dark:border-slate-700">

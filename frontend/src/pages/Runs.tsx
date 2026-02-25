@@ -71,8 +71,11 @@ export const RunsListPage = () => {
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input
+                        id="run-search"
+                        name="run-search"
                         type="text"
                         placeholder="Search runs by ID or agent..."
+                        aria-label="Search runs"
                         className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                         value={searchTerm}
                         onChange={(event) => setSearchTerm(event.target.value)}

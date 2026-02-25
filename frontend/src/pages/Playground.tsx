@@ -148,6 +148,8 @@ export const PlaygroundPage = () => {
                         <div className="flex items-end gap-4">
                             <div className="flex-1">
                                 <textarea
+                                    id="agent-goal"
+                                    name="agent-goal"
                                     className="w-full min-h-[100px] max-h-[300px] p-4 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 resize-none"
                                     placeholder="Enter a goal for the agent (e.g. 'Analyze the current market trends for AI stocks')..."
                                     value={goal}
@@ -195,8 +197,10 @@ export const PlaygroundPage = () => {
 
                         <div className="space-y-4">
                             <div className="space-y-2">
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Session ID</label>
+                                <label htmlFor="session-id" className="text-xs font-bold text-slate-500 uppercase tracking-wider">Session ID</label>
                                 <input
+                                    id="session-id"
+                                    name="session-id"
                                     type="text"
                                     value={sessionId}
                                     onChange={(e) => setSessionId(e.target.value)}
@@ -205,8 +209,10 @@ export const PlaygroundPage = () => {
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Top-P Sampling</label>
+                                <label htmlFor="top-p" className="text-xs font-bold text-slate-500 uppercase tracking-wider">Top-P Sampling</label>
                                 <input
+                                    id="top-p"
+                                    name="top-p"
                                     type="range"
                                     min={0}
                                     max={1}
@@ -223,9 +229,11 @@ export const PlaygroundPage = () => {
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Max Tokens</label>
+                                <label htmlFor="max-tokens" className="text-xs font-bold text-slate-500 uppercase tracking-wider">Max Tokens</label>
                                 <div className="flex items-center gap-2">
                                     <input
+                                        id="max-tokens"
+                                        name="max-tokens"
                                         type="number"
                                         value={maxTokens}
                                         min={256}

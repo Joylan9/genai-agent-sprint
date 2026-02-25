@@ -166,8 +166,11 @@ export const AgentListPage = () => {
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input
+                        id="agent-search"
+                        name="agent-search"
                         type="text"
                         placeholder="Search agents by name..."
+                        aria-label="Search agents"
                         className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                         value={query}
                         onChange={(event) => onSearchChange(event.target.value)}
@@ -246,12 +249,14 @@ export const AgentListPage = () => {
             >
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-2">
                     <Input
+                        id="agent-name"
                         label="Agent Name"
                         placeholder="e.g. Finance Analyzer"
                         {...register('name')}
                         error={errors.name?.message}
                     />
                     <Input
+                        id="agent-version"
                         label="Version (optional)"
                         placeholder="Defaults to 1.0.0"
                         {...register('version')}
@@ -261,8 +266,10 @@ export const AgentListPage = () => {
                         Leave empty to auto-assign version `1.0.0`.
                     </p>
                     <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-slate-700">Description</label>
+                        <label htmlFor="agent-description" className="text-sm font-medium text-slate-700">Description</label>
                         <textarea
+                            id="agent-description"
+                            name="description"
                             className="w-full min-h-[100px] rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                             placeholder="What does this agent do?"
                             {...register('description')}

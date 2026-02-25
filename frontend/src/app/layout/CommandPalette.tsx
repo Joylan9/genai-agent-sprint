@@ -44,6 +44,8 @@ export const CommandPalette = () => {
                 <div className="flex items-center px-4 py-3 border-b border-slate-100 dark:border-slate-800">
                     <Search className="mr-3 text-slate-400" size={20} />
                     <input
+                        id="command-search"
+                        name="command-search"
                         autoFocus
                         value={query}
                         onChange={(event) => setQuery(event.target.value)}
@@ -55,6 +57,7 @@ export const CommandPalette = () => {
                         }}
                         className="flex-1 bg-transparent border-none outline-none text-slate-900 placeholder:text-slate-400 text-base dark:text-slate-100"
                         placeholder="Type an agent name and press Enter..."
+                        aria-label="Command palette search"
                     />
                     <div className="flex items-center gap-1 border border-slate-200 rounded px-1.5 py-0.5 bg-slate-50 text-[10px] text-slate-400 ml-2 dark:bg-slate-800 dark:border-slate-700">
                         <span>ESC</span>
