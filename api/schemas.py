@@ -22,7 +22,14 @@ class AgentRequest(BaseModel):
         description="User goal or complex query for the AI agent."
     )
 
+    agent_id: Optional[str] = Field(
+        default=None,
+        max_length=100,
+        description="Optional agent catalog identifier.",
+    )
+
 
 class AgentResponse(BaseModel):
     result: str
     request_id: Optional[str] = None
+    status: Optional[str] = None

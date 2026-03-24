@@ -12,7 +12,7 @@ interface RunSummary {
     status: string;
     goal?: string;
     agent_name?: string;
-    created_at?: string;
+    started_at?: string;
     latency_total?: number;
 }
 
@@ -185,7 +185,7 @@ const RunCard = ({ run }: { run: RunSummary }) => {
             <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-400">
                 {run.agent_name && <span>🤖 {run.agent_name}</span>}
                 {run.latency_total && <span>⏱ {run.latency_total.toFixed(1)}s</span>}
-                {run.created_at && <span>{new Date(run.created_at).toLocaleTimeString()}</span>}
+                {run.started_at && <span>{new Date(run.started_at).toLocaleTimeString()}</span>}
             </div>
         </Link>
     );

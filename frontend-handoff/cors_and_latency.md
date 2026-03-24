@@ -23,3 +23,26 @@ For production, the `ORIGINS` environment variable must be updated. If the front
 ### Headers
 Every request MUST include:
 - `x-api-key`: Found in `.env` or `DEV_API_KEY.txt`.
+# Current TraceAI Latency and CORS Notes
+
+This section supersedes the older API-key guidance later in the file.
+
+## Expected latency
+- `POST /api/runs/submit`: typically under `200ms`
+- SSE first event: typically under `1s`, depending on worker pickup
+- Cache hit: usually under `500ms`
+- Multi-step run: typically `3-15s`
+
+Frontend guidance:
+- Show `queued`, then `running`, then the terminal state.
+- Prefer SSE for active runs and fall back to `/api/runs/{id}/status` polling.
+
+## CORS
+- Default dev origins are `http://localhost:5173`, `http://127.0.0.1:5173`, `http://localhost:4173`, and `http://127.0.0.1:4173`.
+- Override with `CORS_ORIGINS` in production.
+
+## Security
+- Protected requests use `Authorization: Bearer <access_token>`.
+- API keys are not the normal frontend auth mechanism anymore.
+
+---

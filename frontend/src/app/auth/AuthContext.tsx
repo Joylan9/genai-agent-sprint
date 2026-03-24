@@ -1,20 +1,28 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { agentClient } from '../../features/agent/api/agentClient';
 
-// ============================================================
-// Types
-// ============================================================
+export type UserRole = 'admin' | 'developer' | 'viewer';
 
-interface User {
+export interface AuthUser {
     id: string;
     email: string;
     name: string;
+    role: UserRole;
+    created_at?: string | null;
+    dev_bypass?: boolean;
+}
+
+interface StoredAuth {
+    access_token: string | null;
+    refresh_token: string | null;
+    user?: AuthUser | null;
 }
 
 interface AuthState {
-    user: User | null;
+    user: AuthUser | null;
     accessToken: string | null;
+    refreshToken: string | null;
     isAuthenticated: boolean;
     isLoading: boolean;
 }
@@ -23,13 +31,27 @@ interface AuthContextType extends AuthState {
     login: (email: string, password: string) => Promise<void>;
     register: (email: string, password: string, name: string) => Promise<void>;
     logout: () => void;
+    refreshSession: () => Promise<void>;
 }
 
-// ============================================================
-// Context
-// ============================================================
-
+const AUTH_STORAGE_KEY = 'auth';
 const AuthContext = createContext<AuthContextType | null>(null);
+
+function readStoredAuth(): StoredAuth | null {
+    const stored = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!stored) return null;
+    try {
+        const parsed = JSON.parse(stored) as StoredAuth;
+        return {
+            access_token: parsed.access_token ?? null,
+            refresh_token: parsed.refresh_token ?? null,
+            user: parsed.user ?? null,
+        };
+    } catch {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        return null;
+    }
+}
 
 export const useAuth = (): AuthContextType => {
     const ctx = useContext(AuthContext);
@@ -37,72 +59,139 @@ export const useAuth = (): AuthContextType => {
     return ctx;
 };
 
-// ============================================================
-// Provider
-// ============================================================
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [state, setState] = useState<AuthState>({
         user: null,
         accessToken: null,
+        refreshToken: null,
         isAuthenticated: false,
         isLoading: true,
     });
 
-    // Restore session from localStorage on mount
-    useEffect(() => {
-        const stored = localStorage.getItem('auth');
-        if (stored) {
-            try {
-                const parsed = JSON.parse(stored);
-                setState({
-                    user: parsed.user,
-                    accessToken: parsed.access_token,
-                    isAuthenticated: true,
-                    isLoading: false,
-                });
-            } catch {
-                localStorage.removeItem('auth');
-                setState(s => ({ ...s, isLoading: false }));
-            }
-        } else {
-            setState(s => ({ ...s, isLoading: false }));
-        }
-    }, []);
-
-    const _persist = (data: any) => {
-        localStorage.setItem('auth', JSON.stringify(data));
+    const persistState = (payload: StoredAuth, user: AuthUser | null) => {
+        const stored: StoredAuth = {
+            access_token: payload.access_token ?? null,
+            refresh_token: payload.refresh_token ?? null,
+            user,
+        };
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(stored));
+        agentClient.setAuthToken(stored.access_token);
         setState({
-            user: data.user,
-            accessToken: data.access_token,
-            isAuthenticated: true,
+            user,
+            accessToken: stored.access_token,
+            refreshToken: stored.refresh_token,
+            isAuthenticated: !!user,
             isLoading: false,
         });
     };
 
-    const login = useCallback(async (email: string, password: string) => {
-        const res = await agentClient.login(email, password);
-        _persist(res);
-    }, []);
-
-    const register = useCallback(async (email: string, password: string, name: string) => {
-        const res = await agentClient.register(email, password, name);
-        _persist(res);
-    }, []);
-
-    const logout = useCallback(() => {
-        localStorage.removeItem('auth');
+    const clearState = () => {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        agentClient.setAuthToken(null);
         setState({
             user: null,
             accessToken: null,
+            refreshToken: null,
             isAuthenticated: false,
             isLoading: false,
         });
+    };
+
+    const refreshSession = async () => {
+        const stored = readStoredAuth();
+        const refreshToken = stored?.refresh_token;
+        if (!refreshToken) {
+            throw new Error('No refresh token available');
+        }
+        const refreshed = await agentClient.refreshToken(refreshToken);
+        const me = await agentClient.getMe();
+        persistState(refreshed, me);
+    };
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const bootstrap = async () => {
+            const stored = readStoredAuth();
+            if (stored?.access_token) {
+                agentClient.setAuthToken(stored.access_token);
+            } else {
+                agentClient.setAuthToken(null);
+            }
+
+            try {
+                if (stored?.access_token) {
+                    const me = await agentClient.getMe();
+                    if (!cancelled) persistState(stored, me);
+                    return;
+                }
+
+                // Allow explicit dev-bypass bootstrap without a stored token.
+                const me = await agentClient.getMe();
+                if (!cancelled) {
+                    persistState(
+                        {
+                            access_token: stored?.access_token ?? null,
+                            refresh_token: stored?.refresh_token ?? null,
+                        },
+                        me,
+                    );
+                }
+            } catch (error) {
+                if (stored?.refresh_token) {
+                    try {
+                        const refreshed = await agentClient.refreshToken(stored.refresh_token);
+                        const me = await agentClient.getMe();
+                        if (!cancelled) persistState(refreshed, me);
+                        return;
+                    } catch {
+                        // fall through to clear auth state
+                    }
+                }
+
+                if (!cancelled) {
+                    clearState();
+                }
+            }
+        };
+
+        bootstrap().finally(() => {
+            if (!cancelled) {
+                setState((current) => ({ ...current, isLoading: false }));
+            }
+        });
+
+        return () => {
+            cancelled = true;
+        };
     }, []);
 
-    return (
-        <AuthContext.Provider value={{ ...state, login, register, logout }}>
-            {children}
-        </AuthContext.Provider>
+    const login = async (email: string, password: string) => {
+        const response = await agentClient.login(email, password);
+        const me = response.user ?? (await agentClient.getMe());
+        persistState(response, me);
+    };
+
+    const register = async (email: string, password: string, name: string) => {
+        const response = await agentClient.register(email, password, name);
+        const me = response.user ?? (await agentClient.getMe());
+        persistState(response, me);
+    };
+
+    const logout = () => {
+        clearState();
+    };
+
+    const value = useMemo<AuthContextType>(
+        () => ({
+            ...state,
+            login,
+            register,
+            logout,
+            refreshSession,
+        }),
+        [state],
     );
+
+    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

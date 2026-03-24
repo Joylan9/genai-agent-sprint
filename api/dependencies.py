@@ -15,6 +15,7 @@ from app.infra.retry_policy import RetryPolicy
 from app.infra.timeout_executor import TimeoutExecutor
 from app.infra.reliable_executor import ReliableExecutor
 from app.infra.logger import StructuredLogger
+from app.config.runtime import web_search_available
 
 
 DATA_PATH = "data/sample.txt"
@@ -57,8 +58,8 @@ def build_agent():
     # ------------------------
     # Web Tool Setup
     # ------------------------
-    web_tool = WebSearchTool()
-    registry.register(web_tool)
+    if web_search_available():
+        registry.register(WebSearchTool())
 
     # ------------------------
     # Router

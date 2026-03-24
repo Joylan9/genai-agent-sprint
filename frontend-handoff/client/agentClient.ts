@@ -1,62 +1,79 @@
-/**
- * Simple, production-ready React/TypeScript client for the AI Agent Platform.
- * Features: Built-in polling for long-running tasks, abort support, and trace tracking.
- */
+export interface AuthResponse {
+    access_token: string;
+    refresh_token: string;
+    token_type: "bearer";
+    expires_in: number;
+    user: {
+        id: string;
+        email: string;
+        name: string;
+        role: "admin" | "developer" | "viewer";
+        created_at?: string | null;
+    };
+}
 
-export interface AgentRequest {
+export interface RunSubmitRequest {
     session_id: string;
     goal: string;
-    options?: { max_steps?: number; use_cache?: boolean };
+    agent_id?: string;
 }
 
-export interface AgentResponse {
-    trace_id: string;
-    response?: string;
-    metadata?: any;
-    status?: "running" | "completed" | "failed";
+export interface RunStatusResponse {
+    run_id: string;
+    status: "queued" | "running" | "completed" | "failed";
+    goal?: string;
+    agent_id?: string | null;
+    agent_name?: string | null;
+    started_at?: string | null;
+    completed_at?: string | null;
+    cache_hit?: boolean;
+    latency_total?: number | null;
+    error?: string | null;
+    result?: string;
 }
 
-export class AgentClient {
-    private baseUrl: string;
-    private apiKey: string;
+export class TraceAIClient {
+    constructor(private readonly baseUrl: string, private accessToken: string | null = null) {}
 
-    constructor(baseUrl: string, apiKey: string) {
-        this.baseUrl = baseUrl;
-        this.apiKey = apiKey;
+    setAccessToken(token: string | null) {
+        this.accessToken = token;
     }
 
-    async runAgent(request: AgentRequest, signal?: AbortSignal): Promise<AgentResponse> {
-        const response = await fetch(`${this.baseUrl}/agent/run`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "x-api-key": this.apiKey,
-            },
-            body: JSON.stringify(request),
-            signal,
-        });
+    private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+        const headers = new Headers(init.headers || {});
+        headers.set("Content-Type", "application/json");
+        if (this.accessToken) {
+            headers.set("Authorization", `Bearer ${this.accessToken}`);
+        }
 
+        const response = await fetch(`${this.baseUrl}${path}`, { ...init, headers });
         if (!response.ok) {
-            throw new Error(`Agent API Error: ${response.statusText}`);
+            throw new Error(`${response.status} ${response.statusText}`);
         }
-
-        return response.json();
+        return response.json() as Promise<T>;
     }
 
-    async pollTrace(traceId: string, interval = 2000, maxAttempts = 30): Promise<AgentResponse> {
-        for (let i = 0; i < maxAttempts; i++) {
-            const response = await fetch(`${this.baseUrl}/traces/${traceId}`, {
-                headers: { "x-api-key": this.apiKey },
-            });
+    async login(email: string, password: string): Promise<AuthResponse> {
+        const response = await this.request<AuthResponse>("/api/auth/login", {
+            method: "POST",
+            body: JSON.stringify({ email, password }),
+        });
+        this.setAccessToken(response.access_token);
+        return response;
+    }
 
-            if (response.ok) {
-                const data = await response.json();
-                if (data.status === "completed" || data.status === "failed") {
-                    return data;
-                }
-            }
-            await new Promise((resolve) => setTimeout(resolve, interval));
-        }
-        throw new Error("Polling timeout: Agent took too long to respond.");
+    async submitRun(payload: RunSubmitRequest): Promise<{ run_id: string; status: "queued" }> {
+        return this.request("/api/runs/submit", {
+            method: "POST",
+            body: JSON.stringify(payload),
+        });
+    }
+
+    async getRunStatus(runId: string): Promise<RunStatusResponse> {
+        return this.request(`/api/runs/${runId}/status`);
+    }
+
+    async getTrace(runId: string) {
+        return this.request(`/traces/${runId}`);
     }
 }

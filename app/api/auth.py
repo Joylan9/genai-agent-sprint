@@ -1,3 +1,4 @@
+'''
 """
 app/api/auth.py
 
@@ -606,3 +607,536 @@ async def reset_password(payload: PasswordResetRequest):
     await db.password_resets.delete_one({"email": email})
 
     return {"message": "Password reset successfully. You can now sign in with your new password."}
+'''
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import hmac
+import json
+import os
+import random
+import smtplib
+from datetime import datetime, timedelta, timezone
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from typing import Optional
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, EmailStr, Field
+
+from app.config.runtime import (
+    ALLOWED_USER_ROLES,
+    UserRole,
+    auth_dev_bypass_enabled,
+    auth_dev_bypass_role,
+    dev_email_otp_echo_enabled,
+)
+from app.memory.database import MongoDB
+
+router = APIRouter(prefix="/api/auth", tags=["authentication"])
+security = HTTPBearer(auto_error=False)
+
+JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-in-production")
+JWT_ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
+REFRESH_TOKEN_EXPIRE_DAYS = 7
+OTP_EXPIRY_MINUTES = 10
+OTP_RESEND_COOLDOWN_SECONDS = 60
+PASSWORD_SCRYPT_N = 2 ** 14
+PASSWORD_SCRYPT_R = 8
+PASSWORD_SCRYPT_P = 1
+PASSWORD_SCRYPT_DKLEN = 64
+DEV_BYPASS_USER_ID = "__dev_bypass_user__"
+
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=6, max_length=128)
+    name: str = Field(..., min_length=1, max_length=100)
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    user: dict
+
+
+class OTPRequest(BaseModel):
+    email: EmailStr
+
+
+class OTPVerifyRequest(BaseModel):
+    email: EmailStr
+    otp: str = Field(..., min_length=6, max_length=6)
+
+
+class PasswordResetRequest(BaseModel):
+    reset_token: str
+    new_password: str = Field(..., min_length=6, max_length=128)
+
+
+def _normalize_role(role: str | None) -> UserRole:
+    raw = (role or "developer").strip().lower()
+    if raw in ALLOWED_USER_ROLES:
+        return raw  # type: ignore[return-value]
+    return "developer"
+
+
+def _public_user(user: dict) -> dict:
+    created_at = user.get("created_at")
+    return {
+        "id": str(user.get("_id")),
+        "email": user.get("email"),
+        "name": user.get("name"),
+        "role": _normalize_role(user.get("role")),
+        "created_at": created_at.isoformat() if hasattr(created_at, "isoformat") else None,
+        "dev_bypass": bool(user.get("__dev_bypass__", False)),
+    }
+
+
+def _hash_password(password: str) -> str:
+    salt = os.urandom(16)
+    derived = hashlib.scrypt(
+        password.encode("utf-8"),
+        salt=salt,
+        n=PASSWORD_SCRYPT_N,
+        r=PASSWORD_SCRYPT_R,
+        p=PASSWORD_SCRYPT_P,
+        dklen=PASSWORD_SCRYPT_DKLEN,
+    )
+    return (
+        "scrypt$"
+        f"{base64.b64encode(salt).decode()}$"
+        f"{PASSWORD_SCRYPT_N}$"
+        f"{PASSWORD_SCRYPT_R}$"
+        f"{PASSWORD_SCRYPT_P}$"
+        f"{PASSWORD_SCRYPT_DKLEN}$"
+        f"{base64.b64encode(derived).decode()}"
+    )
+
+
+def _verify_scrypt_password(password: str, stored_hash: str) -> bool:
+    try:
+        _, salt_b64, n_str, r_str, p_str, dklen_str, expected_b64 = stored_hash.split("$", 6)
+        derived = hashlib.scrypt(
+            password.encode("utf-8"),
+            salt=base64.b64decode(salt_b64),
+            n=int(n_str),
+            r=int(r_str),
+            p=int(p_str),
+            dklen=int(dklen_str),
+        )
+        return hmac.compare_digest(base64.b64encode(derived).decode(), expected_b64)
+    except Exception:
+        return False
+
+
+def _verify_legacy_password(password: str, stored_hash: str) -> bool:
+    try:
+        salt, pw_hash = stored_hash.split("$", 1)
+        check_hash = hashlib.sha256(f"{salt}:{password}".encode("utf-8")).hexdigest()
+        return hmac.compare_digest(check_hash, pw_hash)
+    except Exception:
+        return False
+
+
+def _verify_password(password: str, stored_hash: str) -> tuple[bool, bool]:
+    if stored_hash.startswith("scrypt$"):
+        return _verify_scrypt_password(password, stored_hash), False
+    valid = _verify_legacy_password(password, stored_hash)
+    return valid, valid
+
+
+def _b64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+
+def _b64url_decode(text: str) -> bytes:
+    padding = (-len(text)) % 4
+    if padding:
+        text += "=" * padding
+    return base64.urlsafe_b64decode(text)
+
+
+def _create_token(payload: dict, expires_delta: timedelta) -> str:
+    header = {"alg": JWT_ALGORITHM, "typ": "JWT"}
+    now = datetime.now(timezone.utc)
+    full_payload = {
+        **payload,
+        "iat": int(now.timestamp()),
+        "exp": int((now + expires_delta).timestamp()),
+        "jti": str(uuid4()),
+    }
+    header_b64 = _b64url_encode(json.dumps(header).encode("utf-8"))
+    payload_b64 = _b64url_encode(json.dumps(full_payload).encode("utf-8"))
+    signing_input = f"{header_b64}.{payload_b64}"
+    signature = hmac.new(JWT_SECRET.encode("utf-8"), signing_input.encode("utf-8"), hashlib.sha256).digest()
+    return f"{signing_input}.{_b64url_encode(signature)}"
+
+
+def _decode_token(token: str) -> Optional[dict]:
+    try:
+        header_b64, payload_b64, sig_b64 = token.split(".")
+    except ValueError:
+        return None
+
+    signing_input = f"{header_b64}.{payload_b64}"
+    expected_sig = hmac.new(JWT_SECRET.encode("utf-8"), signing_input.encode("utf-8"), hashlib.sha256).digest()
+    actual_sig = _b64url_decode(sig_b64)
+    if not hmac.compare_digest(expected_sig, actual_sig):
+        return None
+
+    try:
+        payload = json.loads(_b64url_decode(payload_b64))
+    except Exception:
+        return None
+
+    if payload.get("exp", 0) < datetime.now(timezone.utc).timestamp():
+        return None
+    return payload
+
+
+def _create_access_token(user: dict) -> str:
+    public_user = _public_user(user)
+    return _create_token(
+        {
+            "sub": public_user["id"],
+            "email": public_user["email"],
+            "role": public_user["role"],
+            "type": "access",
+        },
+        timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+
+
+def _create_refresh_token(user_id: str) -> str:
+    return _create_token({"sub": user_id, "type": "refresh"}, timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS))
+
+
+def _build_dev_bypass_user() -> dict:
+    now = datetime.now(timezone.utc)
+    return {
+        "_id": DEV_BYPASS_USER_ID,
+        "email": "dev-bypass@traceai.local",
+        "name": "Dev Bypass",
+        "role": auth_dev_bypass_role(),
+        "created_at": now,
+        "updated_at": now,
+        "__dev_bypass__": True,
+    }
+
+
+async def get_current_user_from_access_token(access_token: str | None) -> dict:
+    if access_token:
+        payload = _decode_token(access_token)
+        if not payload or payload.get("type") != "access":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        db = MongoDB.get_database()
+        user = await db.users.find_one({"_id": payload["sub"]})
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found",
+            )
+        return user
+
+    if auth_dev_bypass_enabled():
+        return _build_dev_bypass_user()
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Authentication required",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+async def get_current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+) -> dict:
+    token = credentials.credentials if credentials else None
+    return await get_current_user_from_access_token(token)
+
+
+async def get_optional_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+) -> Optional[dict]:
+    token = credentials.credentials if credentials else None
+    try:
+        return await get_current_user_from_access_token(token)
+    except HTTPException:
+        return None
+
+
+def require_role(*roles: UserRole):
+    allowed = {_normalize_role(role) for role in roles}
+
+    async def dependency(user: dict = Depends(get_current_user)) -> dict:
+        user_role = _normalize_role(user.get("role"))
+        if user_role not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Requires role: {', '.join(sorted(allowed))}",
+            )
+        return user
+
+    return dependency
+
+
+@router.post("/register", response_model=TokenResponse)
+async def register(payload: RegisterRequest):
+    db = MongoDB.get_database()
+    existing = await db.users.find_one({"email": payload.email.lower()})
+    if existing:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+
+    now = datetime.now(timezone.utc)
+    user = {
+        "_id": str(uuid4()),
+        "email": payload.email.lower(),
+        "name": payload.name.strip(),
+        "role": "developer",
+        "password_hash": _hash_password(payload.password),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.users.insert_one(user)
+
+    return TokenResponse(
+        access_token=_create_access_token(user),
+        refresh_token=_create_refresh_token(user["_id"]),
+        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        user=_public_user(user),
+    )
+
+
+@router.post("/login", response_model=TokenResponse)
+async def login(payload: LoginRequest):
+    db = MongoDB.get_database()
+    user = await db.users.find_one({"email": payload.email.lower()})
+    valid, should_migrate = _verify_password(payload.password, user.get("password_hash", "") if user else "")
+    if not user or not valid:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+
+    if should_migrate:
+        new_hash = _hash_password(payload.password)
+        await db.users.update_one(
+            {"_id": user["_id"]},
+            {"$set": {"password_hash": new_hash, "updated_at": datetime.now(timezone.utc)}},
+        )
+        user["password_hash"] = new_hash
+
+    user["role"] = _normalize_role(user.get("role"))
+    return TokenResponse(
+        access_token=_create_access_token(user),
+        refresh_token=_create_refresh_token(str(user["_id"])),
+        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        user=_public_user(user),
+    )
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_token(payload: RefreshRequest):
+    token_payload = _decode_token(payload.refresh_token)
+    if not token_payload or token_payload.get("type") != "refresh":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token")
+
+    db = MongoDB.get_database()
+    user = await db.users.find_one({"_id": token_payload["sub"]})
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
+    user["role"] = _normalize_role(user.get("role"))
+    return TokenResponse(
+        access_token=_create_access_token(user),
+        refresh_token=_create_refresh_token(str(user["_id"])),
+        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        user=_public_user(user),
+    )
+
+
+@router.get("/me")
+async def get_me(user: dict = Depends(get_current_user)):
+    return _public_user(user)
+
+
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASS = os.getenv("SMTP_PASS", "")
+SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USER or "noreply@traceai.dev")
+
+
+def _generate_otp() -> str:
+    return f"{random.randint(100000, 999999)}"
+
+
+def _is_smtp_configured() -> bool:
+    if not SMTP_USER or not SMTP_PASS:
+        return False
+    placeholders = ["your-email", "your-16-char", "example.com", "changeme", "placeholder"]
+    lowered = f"{SMTP_USER} {SMTP_PASS}".lower()
+    return not any(token in lowered for token in placeholders)
+
+
+def _send_otp_email(to_email: str, otp: str, user_name: str = "User") -> bool:
+    if not _is_smtp_configured():
+        return False
+
+    html_body = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
+        <div style="text-align: center; margin-bottom: 32px;">
+            <h2 style="color: #1e293b; margin: 12px 0 4px;">TraceAI Platform</h2>
+        </div>
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 32px; text-align: center;">
+            <p style="color: #64748b; margin: 0 0 8px; font-size: 14px;">Hi {user_name},</p>
+            <p style="color: #334155; margin: 0 0 24px; font-size: 15px;">Your verification code is:</p>
+            <div style="background: linear-gradient(135deg, #3b82f6, #6366f1); color: white; font-size: 32px; font-weight: bold; letter-spacing: 8px; padding: 16px 32px; border-radius: 10px; display: inline-block; font-family: monospace;">
+                {otp}
+            </div>
+            <p style="color: #94a3b8; margin: 24px 0 0; font-size: 13px;">
+                This code expires in {OTP_EXPIRY_MINUTES} minutes.
+            </p>
+        </div>
+    </div>
+    """
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"TraceAI verification code: {otp}"
+        msg["From"] = f"TraceAI Platform <{SMTP_FROM}>"
+        msg["To"] = to_email
+        msg.attach(MIMEText(html_body, "html"))
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(SMTP_FROM, to_email, msg.as_string())
+        return True
+    except Exception:
+        return False
+
+
+@router.post("/request-otp")
+async def request_otp(payload: OTPRequest):
+    db = MongoDB.get_database()
+    email = payload.email.lower()
+    user = await db.users.find_one({"email": email})
+    if not user:
+        return {"message": "If an account exists with this email, a verification code has been sent."}
+
+    existing = await db.password_resets.find_one({"email": email})
+    if existing and existing.get("created_at"):
+        delta = datetime.now(timezone.utc) - existing["created_at"]
+        if delta.total_seconds() < OTP_RESEND_COOLDOWN_SECONDS:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Please wait {OTP_RESEND_COOLDOWN_SECONDS} seconds before requesting another code.",
+            )
+
+    otp = _generate_otp()
+    otp_hash = hashlib.sha256(otp.encode("utf-8")).hexdigest()
+    now = datetime.now(timezone.utc)
+    await db.password_resets.update_one(
+        {"email": email},
+        {
+            "$set": {
+                "otp_hash": otp_hash,
+                "attempts": 0,
+                "created_at": now,
+                "expires_at": now + timedelta(minutes=OTP_EXPIRY_MINUTES),
+                "verified": False,
+            }
+        },
+        upsert=True,
+    )
+
+    email_sent = _send_otp_email(email, otp, user.get("name", "User"))
+    response: dict[str, object] = {
+        "message": "If an account exists with this email, a verification code has been sent.",
+        "expires_in": OTP_EXPIRY_MINUTES * 60,
+    }
+    if dev_email_otp_echo_enabled():
+        response["dev_otp"] = otp
+        response["dev_notice"] = "OTP returned because DEV_EMAIL_OTP_ECHO_ENABLED=true."
+    elif not email_sent and not _is_smtp_configured():
+        response["warning"] = "Email delivery unavailable because SMTP is not configured."
+    elif not email_sent:
+        response["warning"] = "Email delivery may have failed. Check backend logs."
+    return response
+
+
+@router.post("/verify-otp")
+async def verify_otp(payload: OTPVerifyRequest):
+    db = MongoDB.get_database()
+    email = payload.email.lower()
+    record = await db.password_resets.find_one({"email": email})
+    if not record:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No verification code found. Please request a new one.")
+
+    if record.get("expires_at") and record["expires_at"] < datetime.now(timezone.utc):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification code expired. Please request a new one.")
+
+    if record.get("attempts", 0) >= 5:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many attempts. Please request a new code.")
+
+    await db.password_resets.update_one({"email": email}, {"$inc": {"attempts": 1}})
+
+    otp_hash = hashlib.sha256(payload.otp.encode("utf-8")).hexdigest()
+    if not hmac.compare_digest(otp_hash, record.get("otp_hash", "")):
+        remaining = max(0, 5 - (record.get("attempts", 0) + 1))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid code. {remaining} attempts remaining.")
+
+    reset_token = _create_token({"sub": email, "type": "password_reset"}, timedelta(minutes=15))
+    await db.password_resets.update_one({"email": email}, {"$set": {"verified": True}})
+    return {"message": "Code verified successfully.", "reset_token": reset_token}
+
+
+@router.post("/reset-password")
+async def reset_password(payload: PasswordResetRequest):
+    token_payload = _decode_token(payload.reset_token)
+    if not token_payload or token_payload.get("type") != "password_reset":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token. Please start over.")
+
+    email = token_payload.get("sub", "")
+    db = MongoDB.get_database()
+    record = await db.password_resets.find_one({"email": email, "verified": True})
+    if not record:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Reset session invalid. Please request a new code.")
+
+    new_hash = _hash_password(payload.new_password)
+    result = await db.users.update_one(
+        {"email": email},
+        {"$set": {"password_hash": new_hash, "updated_at": datetime.now(timezone.utc)}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found.")
+
+    await db.password_resets.delete_one({"email": email})
+    return {"message": "Password reset successfully. You can now sign in with your new password."}
+
+
+@router.get("/protected")
+async def protected_probe(role: str = Query(default="viewer"), user: dict = Depends(get_current_user)):
+    if _normalize_role(user.get("role")) not in {_normalize_role(role)}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Role not permitted")
+    return {"user": _public_user(user)}

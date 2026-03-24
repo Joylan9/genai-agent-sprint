@@ -1,11 +1,13 @@
 {
-    "trace_id": "mock-trace-123",
-    "response": "Based on my research, RAG stands for Retrieval-Augmented Generation. It is a technique used to give LLMs access to external, up-to-date data without needing to retrain them.",
-    "metadata": {
-        "llm_latency_ms": 1250,
-        "tools_used": [
-            "rag_search"
-        ],
-        "cache_hit": true
-    }
+  "run_id": "run-123",
+  "status": "completed",
+  "goal": "Explain RAG simply",
+  "agent_id": "agent-123",
+  "agent_name": "Trace Agent",
+  "started_at": "2026-03-24T10:00:05+00:00",
+  "completed_at": "2026-03-24T10:00:11+00:00",
+  "cache_hit": false,
+  "latency_total": 6.18,
+  "error": null,
+  "result": "Retrieval-Augmented Generation combines retrieval with generation so the model can ground its answer in external knowledge."
 }

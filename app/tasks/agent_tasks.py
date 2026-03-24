@@ -54,7 +54,7 @@ async def _emit_event(db, run_id: str, event_type: str, data: dict = None):
     })
 
 
-async def _execute_agent_async(run_id: str, session_id: str, goal: str):
+async def _execute_agent_async(run_id: str, session_id: str, goal: str, agent_id: str | None = None):
     """
     Core async execution logic.
     Called from the sync Celery task via _run_async().
@@ -65,9 +65,11 @@ async def _execute_agent_async(run_id: str, session_id: str, goal: str):
 
     try:
         # ---- Mark as running ----
+        started_at = datetime.now(timezone.utc)
         await _update_trace(db, run_id, {
             "status": "running",
-            "started_at": datetime.now(timezone.utc),
+            "started_at": started_at,
+            "agent_id": agent_id,
         })
         await _emit_event(db, run_id, "status_change", {"status": "running"})
 
@@ -75,35 +77,26 @@ async def _execute_agent_async(run_id: str, session_id: str, goal: str):
         from api.dependencies import build_agent
         agent = build_agent()
 
-        # ---- Plan ----
-        await _emit_event(db, run_id, "planner_start")
-        plan = await agent.create_plan(goal, session_id=session_id)
-        await _emit_event(db, run_id, "planner_complete", {"plan_preview": plan[:500]})
+        async def event_callback(event_type: str, data: dict | None = None):
+            await _emit_event(db, run_id, event_type, data or {})
 
-        await _update_trace(db, run_id, {
-            "plan": plan,
-            "status": "running",
-        })
-
-        # ---- Execute ----
-        await _emit_event(db, run_id, "execution_start")
-        result = await agent.execute_plan(session_id, goal, plan)
-        await _emit_event(db, run_id, "execution_complete")
-
-        # ---- Mark completed ----
-        await _update_trace(db, run_id, {
-            "status": "completed",
-            "final_answer": result.get("result"),
-            "completed_at": datetime.now(timezone.utc),
-        })
-        await _emit_event(db, run_id, "status_change", {"status": "completed"})
-
+        await agent.run_goal(
+            session_id,
+            goal,
+            agent_id=agent_id,
+            request_id=run_id,
+            started_at=started_at,
+            event_callback=event_callback,
+        )
         return {"status": "completed", "run_id": run_id}
 
     except Exception as e:
         # ---- Mark failed ----
         error_detail = f"{type(e).__name__}: {str(e)}"
         tb = traceback.format_exc()
+        existing = await db.traces.find_one({"request_id": run_id}, {"status": 1})
+        if existing and existing.get("status") == "failed":
+            return {"status": "failed", "run_id": run_id, "error": error_detail}
 
         await _update_trace(db, run_id, {
             "status": "failed",
@@ -111,10 +104,8 @@ async def _execute_agent_async(run_id: str, session_id: str, goal: str):
             "error_traceback": tb,
             "completed_at": datetime.now(timezone.utc),
         })
-        await _emit_event(db, run_id, "status_change", {
-            "status": "failed",
-            "error": error_detail,
-        })
+        await _emit_event(db, run_id, "error", {"error": error_detail})
+        await _emit_event(db, run_id, "status_change", {"status": "failed", "error": error_detail})
 
         return {"status": "failed", "run_id": run_id, "error": error_detail}
 
@@ -133,7 +124,7 @@ async def _execute_agent_async(run_id: str, session_id: str, goal: str):
     time_limit=300,       # hard kill after 5 min
     soft_time_limit=240,  # SoftTimeLimitExceeded after 4 min
 )
-def execute_agent_run(self, run_id: str, session_id: str, goal: str):
+def execute_agent_run(self, run_id: str, session_id: str, goal: str, agent_id: str | None = None):
     """
     Celery task: execute an agent run asynchronously.
 
@@ -143,7 +134,7 @@ def execute_agent_run(self, run_id: str, session_id: str, goal: str):
     The trace document must already exist with status='queued'.
     """
     try:
-        return _run_async(_execute_agent_async(run_id, session_id, goal))
+        return _run_async(_execute_agent_async(run_id, session_id, goal, agent_id))
     except Exception as e:
         # If async execution itself crashes, mark as failed
         try:

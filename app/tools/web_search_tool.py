@@ -19,10 +19,6 @@ class WebSearchTool(BaseTool):
 
     def __init__(self):
         self.api_key = os.getenv("SERPAPI_KEY")
-
-        if not self.api_key:
-            raise ValueError("SERPAPI_KEY not found in environment variables.")
-
         self.base_url = "https://serpapi.com/search.json"
 
         # Circuit Breaker for SerpAPI
@@ -33,7 +29,13 @@ class WebSearchTool(BaseTool):
             name="serpapi"
         )
 
+    @property
+    def is_available(self) -> bool:
+        return bool(self.api_key)
+
     async def search(self, query: str, num_results: int = 3):
+        if not self.is_available:
+            return "Web search is unavailable because SERPAPI_KEY is not configured."
 
         params = {
             "q": query,

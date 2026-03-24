@@ -12,7 +12,6 @@ declare global {
     interface Window {
         __APP_CONFIG__?: {
             VITE_API_BASE?: string;
-            VITE_API_KEY?: string;
             APP_VERSION?: string;
             FEATURE_FLAGS_ENDPOINT?: string;
             FRONTEND_HEALTH_ENDPOINT?: string;
@@ -25,26 +24,50 @@ declare global {
 
 function getRuntimeConfig() {
     const cfg = (typeof window !== "undefined" && window.__APP_CONFIG__) || {};
-    const isLocal = typeof window !== 'undefined'
-        && ['localhost', '127.0.0.1'].includes(window.location.hostname);
-    const fallbackLocalApiKey = isLocal ? 'supersecretkey' : undefined;
     return {
         API_BASE_URL: cfg.VITE_API_BASE || import.meta.env.VITE_API_BASE || 'http://localhost:8000',
-        API_KEY: cfg.VITE_API_KEY || import.meta.env.VITE_API_KEY || fallbackLocalApiKey,
         APP_VERSION: cfg.APP_VERSION || '0.0.0-LOCAL',
         REFRESH_ENDPOINT: cfg.REFRESH_ENDPOINT || '/api/auth/refresh',
         TELEMETRY_ENDPOINT: cfg.TELEMETRY_ENDPOINT || undefined,
-        ENABLE_AUTH_REFRESH: (cfg.ENABLE_AUTH_REFRESH || import.meta.env.VITE_ENABLE_AUTH_REFRESH || 'false') === 'true',
+        ENABLE_AUTH_REFRESH: (cfg.ENABLE_AUTH_REFRESH || import.meta.env.VITE_ENABLE_AUTH_REFRESH || 'true') === 'true',
     };
 }
 
 const runtime = getRuntimeConfig();
 const API_BASE_URL = runtime.API_BASE_URL;
-const API_KEY = runtime.API_KEY;
 const APP_VERSION = runtime.APP_VERSION;
 const REFRESH_ENDPOINT = runtime.REFRESH_ENDPOINT;
 const TELEMETRY_ENDPOINT = runtime.TELEMETRY_ENDPOINT;
 const ENABLE_AUTH_REFRESH = runtime.ENABLE_AUTH_REFRESH;
+const AUTH_STORAGE_KEY = 'auth';
+
+type StoredAuth = {
+    access_token: string | null;
+    refresh_token: string | null;
+    user?: any;
+};
+
+function readStoredAuth(): StoredAuth | null {
+    if (typeof window === 'undefined') return null;
+    const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) return null;
+    try {
+        return JSON.parse(raw) as StoredAuth;
+    } catch {
+        window.localStorage.removeItem(AUTH_STORAGE_KEY);
+        return null;
+    }
+}
+
+function writeStoredAuth(payload: StoredAuth) {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(payload));
+}
+
+function clearStoredAuth() {
+    if (typeof window === 'undefined') return;
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+}
 
 class AgentClient {
     public instance: AxiosInstance;
@@ -63,6 +86,11 @@ class AgentClient {
         });
 
         this.setupInterceptors();
+
+        const stored = readStoredAuth();
+        if (stored?.access_token) {
+            this.setAuthToken(stored.access_token);
+        }
     }
 
     private setupInterceptors() {
@@ -70,9 +98,6 @@ class AgentClient {
         this.instance.interceptors.request.use(
             (config: InternalAxiosRequestConfig) => {
                 config.headers = config.headers ?? {};
-                if (API_KEY) {
-                    config.headers['X-API-KEY'] = API_KEY;
-                }
                 const requestId = (
                     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
                 )
@@ -100,6 +125,14 @@ class AgentClient {
                     && !String(originalRequest?.url || '').includes(REFRESH_ENDPOINT);
 
                 if (error.response?.status === 401 && shouldRefresh && !originalRequest._retry) {
+                    const stored = readStoredAuth();
+                    const refreshToken = stored?.refresh_token;
+                    if (!refreshToken) {
+                        clearStoredAuth();
+                        this.setAuthToken(null);
+                        return Promise.reject(this.normalizeError(error));
+                    }
+
                     if (this.isRefreshing) {
                         return new Promise((resolve, reject) => {
                             this.failedQueue.push({ resolve, reject });
@@ -115,13 +148,25 @@ class AgentClient {
 
                     try {
                         this.trackEvent('session_refresh_started', { url: originalRequest.url });
-                        await this.instance.post(REFRESH_ENDPOINT);
+                        const refreshed = await this.instance.post<any, {
+                            access_token: string;
+                            refresh_token: string;
+                            user?: any;
+                        }>(REFRESH_ENDPOINT, { refresh_token: refreshToken });
+                        this.setAuthToken(refreshed.access_token);
+                        writeStoredAuth({
+                            access_token: refreshed.access_token,
+                            refresh_token: refreshed.refresh_token,
+                            user: refreshed.user ?? stored?.user ?? null,
+                        });
                         this.isRefreshing = false;
                         this.processQueue(null);
                         return this.instance(originalRequest);
                     } catch (refreshError) {
                         this.isRefreshing = false;
                         this.processQueue(refreshError);
+                        clearStoredAuth();
+                        this.setAuthToken(null);
                         this.trackEvent('session_expired_final', { url: originalRequest.url });
                         return Promise.reject(this.normalizeError(refreshError));
                     }
@@ -225,6 +270,18 @@ class AgentClient {
         return this.instance.patch(`/api/agents/${agentId}`, updates);
     }
 
+    async getAgentVersions(agentId: string): Promise<any[]> {
+        return this.instance.get(`/api/agents/${agentId}/versions`);
+    }
+
+    async createAgentVersion(agentId: string, request: { version: string; metadata?: Record<string, any> }): Promise<any> {
+        return this.instance.post(`/api/agents/${agentId}/versions`, request);
+    }
+
+    async promoteAgentVersion(agentId: string, version: string): Promise<any> {
+        return this.instance.post(`/api/agents/${agentId}/versions/${version}/promote`);
+    }
+
     async listRuns(filters?: { q?: string; status?: string }): Promise<any[]> {
         return this.instance.get('/api/runs', {
             params: filters
@@ -247,7 +304,7 @@ class AgentClient {
     // Async Run Submission (Celery-backed)
     // ============================================================
 
-    async submitRun(request: { session_id: string; goal: string }): Promise<{ run_id: string; status: string }> {
+    async submitRun(request: { session_id: string; goal: string; agent_id?: string }): Promise<{ run_id: string; status: string }> {
         return this.instance.post('/api/runs/submit', request);
     }
 
@@ -301,6 +358,10 @@ class AgentClient {
         return this.instance.post('/api/eval/run-suite', { suite_name: suiteName });
     }
 
+    async listEvalSuites(): Promise<Array<{ name: string; path: string }>> {
+        return this.instance.get('/api/eval/suites');
+    }
+
     async getEvalResults(): Promise<any[]> {
         return this.instance.get('/api/eval/results');
     }
@@ -314,18 +375,28 @@ class AgentClient {
     // ============================================================
 
     async requestOtp(email: string): Promise<any> {
-        const res = await this.instance.post('/api/auth/request-otp', { email });
-        return res.data;
+        return this.instance.post('/api/auth/request-otp', { email });
     }
 
     async verifyOtp(email: string, otp: string): Promise<any> {
-        const res = await this.instance.post('/api/auth/verify-otp', { email, otp });
-        return res.data;
+        return this.instance.post('/api/auth/verify-otp', { email, otp });
     }
 
     async resetPassword(resetToken: string, newPassword: string): Promise<any> {
-        const res = await this.instance.post('/api/auth/reset-password', { reset_token: resetToken, new_password: newPassword });
-        return res.data;
+        return this.instance.post('/api/auth/reset-password', { reset_token: resetToken, new_password: newPassword });
+    }
+
+    getAccessToken(): string | null {
+        return readStoredAuth()?.access_token ?? null;
+    }
+
+    getRunStreamUrl(runId: string): string {
+        const token = this.getAccessToken();
+        const url = new URL(`/api/runs/${runId}/stream`, API_BASE_URL);
+        if (token) {
+            url.searchParams.set('access_token', token);
+        }
+        return url.toString();
     }
 }
 

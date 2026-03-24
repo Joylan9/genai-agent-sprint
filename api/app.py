@@ -1,3 +1,4 @@
+'''
 """
 api/app.py
 FastAPI entrypoint for the Enterprise AI Agent Engine.
@@ -364,3 +365,9 @@ async def run_agent(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+'''
+
+from app.api_app import app
+from api.dependencies import build_agent
+
+__all__ = ["app", "build_agent"]

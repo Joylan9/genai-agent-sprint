@@ -18,7 +18,7 @@ export const Dashboard = () => {
         { title: 'Total Agents', value: agents?.length.toString() || '0', icon: Users, color: 'bg-amber-500' },
         { title: 'Active Runs', value: runs?.filter((r: any) => r.status === 'running').length.toString() || '0', icon: Activity, color: 'bg-blue-500' },
         { title: 'Successful Runs', value: runs?.filter((r: any) => r.status === 'completed').length.toString() || '0', icon: CheckCircle, color: 'bg-green-500' },
-        { title: 'Pending Runs', value: runs?.filter((r: any) => r.status === 'pending').length.toString() || '0', icon: Clock, color: 'bg-purple-500' },
+        { title: 'Queued Runs', value: runs?.filter((r: any) => r.status === 'queued').length.toString() || '0', icon: Clock, color: 'bg-purple-500' },
     ];
 
     return (

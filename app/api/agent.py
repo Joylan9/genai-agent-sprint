@@ -1,8 +1,8 @@
-from fastapi import APIRouter, HTTPException, Header, Depends
+from fastapi import APIRouter, HTTPException, Depends
 from api.schemas import AgentRequest, AgentResponse
 from api.dependencies import build_agent
 from app.infra.validators import InputValidator
-import os
+from app.api.auth import require_role
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -15,27 +15,10 @@ def get_agent():
         _agent = build_agent()
     return _agent
 
-def _enforce_api_key() -> bool:
-    """
-    Local/dev default is relaxed auth for faster setup.
-    Set ENFORCE_API_KEY=true in production.
-    """
-    raw = os.getenv("ENFORCE_API_KEY", "false").strip().lower()
-    return raw in {"1", "true", "yes", "on"}
-
-
-def verify_api_key(x_api_key: str = Header(None)):
-    if not _enforce_api_key():
-        return
-
-    api_key = os.getenv("API_KEY", "supersecretkey")
-    if x_api_key != api_key:
-        raise HTTPException(status_code=401, detail="Invalid or missing API key")
-
 @router.post("/run", response_model=AgentResponse)
 async def run_agent(
     request: AgentRequest,
-    _: None = Depends(verify_api_key),
+    _: dict = Depends(require_role("developer", "admin")),
     agent = Depends(get_agent)
 ):
     try:
@@ -45,18 +28,16 @@ async def run_agent(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-        # IMPORTANT: create_plan is now async
-        plan = await agent.create_plan(validated_goal, session_id=request.session_id)
-
-        execution_output = await agent.execute_plan(
+        execution_output = await agent.run_goal(
             request.session_id,
             validated_goal,
-            plan
+            agent_id=request.agent_id,
         )
 
         return AgentResponse(
             result=execution_output["result"],
             request_id=execution_output["request_id"],
+            status=execution_output.get("status"),
         )
 
     except HTTPException:

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { agentClient } from '../features/agent/api/agentClient';
+import { usePermission } from '../app/auth/usePermission';
 import { Button } from '../shared/ui/Button';
 import { Badge } from '../shared/ui/Badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../shared/ui/Table';
@@ -15,16 +16,24 @@ interface AgentDetail {
     name: string;
     description?: string;
     version?: string;
+    current_version?: string;
     status?: string;
     created_at?: string;
+    updated_at?: string;
+    metadata?: Record<string, any>;
     tools?: string[];
+    versions?: Array<{
+        version: string;
+        created_at?: string;
+        metadata?: Record<string, any>;
+    }>;
 }
 
 interface Run {
     id: string;
     status: string;
     final_answer?: string;
-    created_at?: string;
+    started_at?: string;
     latency_total?: number;
     cache_hit?: boolean;
 }
@@ -32,6 +41,7 @@ interface Run {
 export const AgentDetailPage = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const { permissions } = usePermission();
     const [agent, setAgent] = useState<AgentDetail | null>(null);
     const [runs, setRuns] = useState<Run[]>([]);
     const [loading, setLoading] = useState(true);
@@ -49,11 +59,8 @@ export const AgentDetailPage = () => {
             setAgent(agentData);
 
             // Load runs for this agent
-            const allRuns = await agentClient.listRuns();
-            const agentRuns = (allRuns || [])
-                .filter((r: any) => r.agent_id === id || r.agent_name === agentData?.name)
-                .slice(0, 20);
-            setRuns(agentRuns);
+            const agentRuns = await agentClient.listRuns({ q: id! });
+            setRuns((agentRuns || []).filter((run: any) => run.agent_id === id || run.agent_name === agentData?.name).slice(0, 20));
         } catch (err: any) {
             setError(err?.message || 'Failed to load agent');
         } finally {
@@ -118,22 +125,38 @@ export const AgentDetailPage = () => {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
+                    {permissions.canCreateAgent && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                                const version = window.prompt('Create immutable snapshot version', agent.current_version || agent.version || '1.0.1');
+                                if (!version) return;
+                                await agentClient.createAgentVersion(agent.id, { version });
+                                await loadData();
+                            }}
+                        >
+                            Snapshot Version
+                        </Button>
+                    )}
                     <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => navigate(`/execute?agent=${agent.name}`)}
+                        onClick={() => navigate(`/execute?agentId=${agent.id}&agent=${encodeURIComponent(agent.name)}`)}
                         className="flex items-center gap-1.5"
                     >
                         <Play size={14} /> Run Agent
                     </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleDelete}
-                        className="text-red-500 hover:bg-red-50 flex items-center gap-1.5"
-                    >
-                        <Trash2 size={14} /> Delete
-                    </Button>
+                    {permissions.canDeleteAgent && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleDelete}
+                            className="text-red-500 hover:bg-red-50 flex items-center gap-1.5"
+                        >
+                            <Trash2 size={14} /> Delete
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -143,7 +166,7 @@ export const AgentDetailPage = () => {
                     <div className="flex items-center gap-2 text-xs text-slate-500 mb-2">
                         <Tag size={12} /> Version
                     </div>
-                    <p className="text-lg font-bold text-slate-800">{agent.version || 'v1.0.0'}</p>
+                    <p className="text-lg font-bold text-slate-800">{agent.current_version || agent.version || 'v1.0.0'}</p>
                 </div>
                 <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
                     <div className="flex items-center gap-2 text-xs text-slate-500 mb-2">
@@ -192,6 +215,51 @@ export const AgentDetailPage = () => {
                     </p>
                 </div>
             </div>
+
+            {agent.versions && agent.versions.length > 0 && (
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-4 border-b border-slate-200 bg-slate-50">
+                        <h3 className="font-semibold text-slate-800">Version History</h3>
+                    </div>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Version</TableHead>
+                                <TableHead>Created</TableHead>
+                                <TableHead>Metadata</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {agent.versions.map((version) => (
+                                <TableRow key={version.version}>
+                                    <TableCell className="font-mono">{version.version}</TableCell>
+                                    <TableCell className="text-xs text-slate-500">
+                                        {version.created_at ? new Date(version.created_at).toLocaleString() : '-'}
+                                    </TableCell>
+                                    <TableCell className="text-xs text-slate-500">
+                                        {Object.keys(version.metadata || {}).length > 0 ? JSON.stringify(version.metadata) : '-'}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        {permissions.isAdmin && version.version !== (agent.current_version || agent.version) && (
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={async () => {
+                                                    await agentClient.promoteAgentVersion(agent.id, version.version);
+                                                    await loadData();
+                                                }}
+                                            >
+                                                Promote
+                                            </Button>
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+            )}
 
             {/* Recent Runs */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -242,7 +310,7 @@ export const AgentDetailPage = () => {
                                         {run.cache_hit && <span className="text-amber-500">⚡</span>}
                                     </TableCell>
                                     <TableCell className="text-xs text-slate-500">
-                                        {run.created_at ? new Date(run.created_at).toLocaleString() : '-'}
+                                        {run.started_at ? new Date(run.started_at).toLocaleString() : '-'}
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <Link to={`/runs/${run.id}`} className="text-blue-600 text-sm hover:underline">

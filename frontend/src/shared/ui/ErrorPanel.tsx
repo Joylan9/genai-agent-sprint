@@ -23,7 +23,7 @@ function getSuggestions(error: string): { text: string; icon: typeof Lightbulb }
     if (lower.includes('ollama') || lower.includes('llm') || lower.includes('connection refused'))
         suggestions.push({ text: 'Check that Ollama is running: ollama serve', icon: Lightbulb });
     if (lower.includes('401') || lower.includes('unauthorized') || lower.includes('auth'))
-        suggestions.push({ text: 'Re-authenticate or verify API_KEY matches between frontend and backend', icon: Lightbulb });
+        suggestions.push({ text: 'Re-authenticate or enable the explicit dev bypass for local development', icon: Lightbulb });
     if (lower.includes('rate limit') || lower.includes('429') || lower.includes('too many'))
         suggestions.push({ text: 'Wait a moment and try again — the API rate limit was exceeded', icon: Lightbulb });
     if (lower.includes('mongo') || lower.includes('database'))
@@ -47,7 +47,7 @@ function categorizeError(error: string): { what: string; why: string } {
     if (lower.includes('ollama') || lower.includes('connection refused'))
         return { what: 'LLM Service Unreachable', why: 'The language model backend (Ollama) could not be reached.' };
     if (lower.includes('401') || lower.includes('unauthorized'))
-        return { what: 'Authentication Failed', why: 'The request lacked valid credentials or the API key is incorrect.' };
+        return { what: 'Authentication Failed', why: 'The request lacked a valid bearer session or the current token expired.' };
     if (lower.includes('rate limit') || lower.includes('429'))
         return { what: 'Rate Limit Exceeded', why: 'Too many requests were sent in a short period.' };
     if (lower.includes('mongo'))

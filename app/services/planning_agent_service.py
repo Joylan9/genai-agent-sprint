@@ -1,3 +1,4 @@
+r'''
 """
 app/services/planning_agent_service.py
 Enterprise planning agent service with Smart Response Caching.
@@ -572,4 +573,526 @@ Observations:
                 final_answer = json.dumps(final_answer)
 
         # Apply Policy Engine Redaction
+        return self.policy.redact(final_answer)
+'''
+
+from __future__ import annotations
+
+import inspect
+import json
+import re
+import time
+from collections.abc import Awaitable, Callable
+from datetime import datetime, timezone
+from typing import Any, Optional
+
+from app.cache.response_cache import ResponseCache
+from app.infra.logger import REQUEST_COUNTER, REQUEST_LATENCY, StructuredLogger, generate_request_id
+from app.infra.ollama_client import get_ollama_client, get_ollama_model, llm_chat
+from app.memory.database import MongoDB
+from app.memory.memory_manager import MemoryManager
+from app.registry.tool_registry import ToolRegistry
+from app.routing.intelligent_router import IntelligentRouter
+from app.security.guardrails import Guardrails
+from app.security.policy_engine import PolicyEngine
+
+
+class PlanningAgentService:
+    def __init__(
+        self,
+        model_name: str | None = None,
+        tool_registry: Optional[ToolRegistry] = None,
+        router: Optional[IntelligentRouter] = None,
+        logger: Optional[StructuredLogger] = None,
+        max_json_retries: int = 2,
+        memory_manager: Optional[MemoryManager] = None,
+    ):
+        self.model_name = model_name or get_ollama_model()
+        self.client = get_ollama_client()
+        self.registry = tool_registry
+        self.router = router
+        self.logger = logger
+        self.max_json_retries = max_json_retries
+        self.memory = memory_manager or MemoryManager()
+        self.cache = ResponseCache(MongoDB.get_database())
+
+        allowed_tools = []
+        try:
+            if self.registry:
+                allowed_tools = self.registry.list_tools()
+        except Exception:
+            allowed_tools = []
+
+        self.guardrails = Guardrails(allowed_tools=allowed_tools)
+        self.policy = PolicyEngine(allowed_tools=allowed_tools)
+
+    async def _emit(
+        self,
+        callback: Callable[[str, dict[str, Any]], Awaitable[None] | None] | None,
+        event_type: str,
+        data: dict[str, Any] | None = None,
+    ) -> None:
+        if not callback:
+            return
+        result = callback(event_type, data or {})
+        if inspect.isawaitable(result):
+            await result
+
+    async def _persist_trace(self, request_id: str, trace_doc: dict[str, Any]) -> None:
+        db = MongoDB.get_database()
+        await db.traces.update_one(
+            {"request_id": request_id},
+            {"$set": trace_doc, "$setOnInsert": {"request_id": request_id}},
+            upsert=True,
+        )
+
+    async def _resolve_agent_name(self, agent_id: str | None) -> str | None:
+        if not agent_id:
+            return None
+        doc = await MongoDB.get_database().agents.find_one({"_id": agent_id}, {"name": 1})
+        return doc.get("name") if doc else None
+
+    async def create_plan(self, goal: str, session_id: str | None = None) -> str:
+        self.guardrails.validate_user_input(goal)
+        available_tools = ", ".join(self.registry.list_tools() if self.registry else [])
+
+        memory_context = ""
+        if session_id:
+            try:
+                context = await self.memory.retrieve_context(
+                    session_id=session_id,
+                    query=goal,
+                    recent_limit=5,
+                    semantic_top_k=3,
+                )
+                recent = context.get("recent_messages", [])
+                relevant = context.get("relevant_memory", [])
+                sections: list[str] = []
+                if recent:
+                    convo = "\n".join(
+                        f"  {item.get('role', 'user')}: {item.get('content', '')[:200]}"
+                        for item in recent[-3:]
+                    )
+                    sections.append(f"Recent conversation:\n{convo}")
+                if relevant:
+                    memories = "\n".join(f"  - {item.get('text', '')[:200]}" for item in relevant[:2])
+                    sections.append(f"Relevant past knowledge:\n{memories}")
+                if sections:
+                    memory_context = (
+                        "\n\nCONTEXT FROM MEMORY (use this to refine the plan when relevant):\n"
+                        + "\n".join(sections)
+                    )
+            except Exception:
+                memory_context = ""
+
+        messages = [
+            {
+                "role": "system",
+                "content": f"""
+You are a planning agent.
+
+You ONLY have access to:
+{available_tools}
+
+Return ONLY valid JSON:
+{{
+  "steps": [
+    {{"tool": "<tool_name>", "query": "<query>"}}
+  ]
+}}
+
+Rules:
+- Use only listed tool names
+- No markdown
+- No explanations
+- Use memory context only when it improves the plan
+{memory_context}
+""",
+            },
+            {"role": "user", "content": goal},
+        ]
+
+        response = await llm_chat(
+            self.client,
+            model=self.model_name,
+            messages=messages,
+            format="json",
+            options={"temperature": 0, "num_ctx": 4096},
+        )
+        content = response["message"]["content"]
+        plan_text = json.dumps(content) if isinstance(content, dict) else content
+        if self.logger:
+            self.logger.log("planner_raw_output", {"raw": plan_text[:2000]})
+        return plan_text
+
+    async def parse_plan_json(self, plan_text: str) -> list[dict[str, Any]]:
+        def extract_json(text: str) -> str | None:
+            match = re.search(r"\{.*\}", text, re.DOTALL)
+            return match.group(0) if match else None
+
+        if isinstance(plan_text, dict):
+            parsed = plan_text
+            return parsed["steps"]
+
+        current_text = plan_text
+        for attempt in range(self.max_json_retries + 1):
+            try:
+                try:
+                    parsed = json.loads(current_text)
+                except Exception:
+                    extracted = extract_json(current_text)
+                    if not extracted:
+                        raise ValueError("No JSON found in planner output.")
+                    parsed = json.loads(extracted)
+
+                steps = parsed.get("steps")
+                if not isinstance(steps, list):
+                    raise ValueError("Invalid plan payload.")
+                return steps
+            except Exception as exc:
+                if attempt >= self.max_json_retries:
+                    raise ValueError(f"Plan parsing failed: {exc}") from exc
+
+                repair = await llm_chat(
+                    self.client,
+                    model=self.model_name,
+                    messages=[
+                        {"role": "system", "content": "Fix JSON only."},
+                        {"role": "user", "content": current_text},
+                    ],
+                    format="json",
+                    options={"temperature": 0, "num_ctx": 4096},
+                )
+                repaired = repair["message"]["content"]
+                current_text = json.dumps(repaired) if isinstance(repaired, dict) else repaired
+
+        raise ValueError("Plan parsing failed.")
+
+    async def execute_plan(
+        self,
+        session_id: str,
+        goal: str,
+        plan_text: str,
+        *,
+        agent_id: str | None = None,
+        request_id: str | None = None,
+        started_at: datetime | None = None,
+        event_callback: Callable[[str, dict[str, Any]], Awaitable[None] | None] | None = None,
+    ) -> dict[str, Any]:
+        request_id = request_id or generate_request_id()
+        started_at = started_at or datetime.now(timezone.utc)
+        agent_name = await self._resolve_agent_name(agent_id)
+        REQUEST_COUNTER.inc()
+        total_start = time.time()
+        observations: list[dict[str, Any]] = []
+        steps: list[dict[str, Any]] = []
+
+        try:
+            planner_start = time.time()
+            steps = await self.parse_plan_json(plan_text)
+            planner_latency = time.time() - planner_start
+            self.guardrails.validate_plan(steps)
+            self.policy.validate_plan(steps)
+
+            cached_response = await self.cache.get(goal, plan_text)
+            if cached_response:
+                total_latency = time.time() - total_start
+                await self._emit(event_callback, "execution_start", {"cache_hit": True})
+                await self._emit(event_callback, "execution_complete", {"steps": len(steps), "observations": 0, "cache_hit": True})
+                await self._emit(event_callback, "synthesis_start", {"cache_hit": True})
+                await self._emit(event_callback, "synthesis_complete", {"cache_hit": True})
+                trace_doc = {
+                    "request_id": request_id,
+                    "session_id": session_id,
+                    "agent_id": agent_id,
+                    "agent_name": agent_name,
+                    "goal": goal,
+                    "plan": plan_text,
+                    "steps": steps,
+                    "observations": [],
+                    "final_answer": cached_response,
+                    "status": "completed",
+                    "cache_hit": True,
+                    "error": None,
+                    "latency": {
+                        "planner": planner_latency,
+                        "tool_total": 0.0,
+                        "tool_wall_time": 0.0,
+                        "synthesis": 0.0,
+                        "total": total_latency,
+                    },
+                    "started_at": started_at,
+                    "completed_at": datetime.now(timezone.utc),
+                    "timestamp": started_at,
+                }
+                await self._persist_trace(request_id, trace_doc)
+                REQUEST_LATENCY.observe(total_latency)
+                return {
+                    "result": cached_response,
+                    "request_id": request_id,
+                    "status": "completed",
+                    "plan": plan_text,
+                    "steps": steps,
+                    "observations": [],
+                    "cache_hit": True,
+                    "latency": trace_doc["latency"],
+                    "error": None,
+                }
+
+            await self._emit(event_callback, "execution_start", {"cache_hit": False})
+            tool_total_latency = 0.0
+            tool_wall_start = time.time()
+
+            async def _maybe_await(value: Any) -> Any:
+                if inspect.isawaitable(value):
+                    return await value
+                return value
+
+            for index, step in enumerate(steps, start=1):
+                await self._emit(event_callback, "tool_start", {"step": index, "tool": step.get("tool"), "query": step.get("query")})
+                if self.router:
+                    response = await _maybe_await(self.router.execute(step, request_id=request_id))
+                else:
+                    tool = self.registry.get(step["tool"])
+                    response = await _maybe_await(tool.execute(step))
+
+                metadata = response.get("metadata", {}) if isinstance(response, dict) else {}
+                if "total_execution_time" in metadata:
+                    try:
+                        tool_total_latency += float(metadata["total_execution_time"])
+                    except Exception:
+                        pass
+
+                data_to_scan = response.get("data", "") if isinstance(response, dict) else str(response)
+                if not isinstance(data_to_scan, str):
+                    data_to_scan = json.dumps(data_to_scan, default=str)
+                self.guardrails.sanitize_tool_output(data_to_scan)
+
+                observation = {
+                    "step": index,
+                    "tool": step.get("tool"),
+                    "query": step.get("query"),
+                    "response": response,
+                }
+                observations.append(observation)
+                await self._emit(
+                    event_callback,
+                    "tool_complete",
+                    {
+                        "step": index,
+                        "tool": step.get("tool"),
+                        "status": response.get("status") if isinstance(response, dict) else "unknown",
+                        "error": metadata.get("error"),
+                        "fallback_from": metadata.get("fallback_from"),
+                    },
+                )
+
+            tool_wall_time = time.time() - tool_wall_start
+            await self._emit(event_callback, "execution_complete", {"steps": len(steps), "observations": len(observations), "cache_hit": False})
+
+            memory_context = await self.memory.retrieve_context(
+                session_id=session_id,
+                query=goal,
+                recent_limit=5,
+                semantic_top_k=3,
+            )
+
+            await self._emit(event_callback, "synthesis_start", {"observations": len(observations)})
+            synthesis_start = time.time()
+            final_answer = await self.synthesize_answer(goal, observations, memory_context)
+            synthesis_latency = time.time() - synthesis_start
+            await self._emit(event_callback, "synthesis_complete", {"preview": final_answer[:500]})
+
+            self.guardrails.validate_final_answer(final_answer)
+            self.guardrails.validate_memory_write(final_answer)
+
+            await self.cache.set(goal, plan_text, final_answer)
+            await self.memory.save_interaction(session_id=session_id, user_message=goal, assistant_message=final_answer)
+
+            total_latency = time.time() - total_start
+            trace_doc = {
+                "request_id": request_id,
+                "session_id": session_id,
+                "agent_id": agent_id,
+                "agent_name": agent_name,
+                "goal": goal,
+                "plan": plan_text,
+                "steps": steps,
+                "observations": observations,
+                "final_answer": final_answer,
+                "status": "completed",
+                "cache_hit": False,
+                "error": None,
+                "latency": {
+                    "planner": planner_latency,
+                    "tool_total": tool_total_latency,
+                    "tool_wall_time": tool_wall_time,
+                    "synthesis": synthesis_latency,
+                    "total": total_latency,
+                },
+                "started_at": started_at,
+                "completed_at": datetime.now(timezone.utc),
+                "timestamp": started_at,
+            }
+            await self._persist_trace(request_id, trace_doc)
+            REQUEST_LATENCY.observe(total_latency)
+
+            return {
+                "result": final_answer,
+                "request_id": request_id,
+                "status": "completed",
+                "plan": plan_text,
+                "steps": steps,
+                "observations": observations,
+                "cache_hit": False,
+                "latency": trace_doc["latency"],
+                "error": None,
+            }
+        except Exception as exc:
+            total_latency = time.time() - total_start
+            failure_doc = {
+                "request_id": request_id,
+                "session_id": session_id,
+                "agent_id": agent_id,
+                "agent_name": agent_name,
+                "goal": goal,
+                "plan": plan_text,
+                "steps": steps,
+                "observations": observations,
+                "final_answer": None,
+                "status": "failed",
+                "cache_hit": False,
+                "error": f"{type(exc).__name__}: {exc}",
+                "latency": {
+                    "planner": 0.0,
+                    "tool_total": 0.0,
+                    "tool_wall_time": 0.0,
+                    "synthesis": 0.0,
+                    "total": total_latency,
+                },
+                "started_at": started_at,
+                "completed_at": datetime.now(timezone.utc),
+                "timestamp": started_at,
+            }
+            await self._persist_trace(request_id, failure_doc)
+            REQUEST_LATENCY.observe(total_latency)
+            raise
+
+    async def run_goal(
+        self,
+        session_id: str,
+        goal: str,
+        *,
+        agent_id: str | None = None,
+        request_id: str | None = None,
+        started_at: datetime | None = None,
+        event_callback: Callable[[str, dict[str, Any]], Awaitable[None] | None] | None = None,
+    ) -> dict[str, Any]:
+        request_id = request_id or generate_request_id()
+        started_at = started_at or datetime.now(timezone.utc)
+        plan_text: str | None = None
+
+        try:
+            await self._emit(event_callback, "planner_start", {"request_id": request_id})
+            plan_text = await self.create_plan(goal, session_id=session_id)
+            await self._emit(event_callback, "planner_complete", {"plan_preview": plan_text[:500]})
+
+            result = await self.execute_plan(
+                session_id,
+                goal,
+                plan_text,
+                agent_id=agent_id,
+                request_id=request_id,
+                started_at=started_at,
+                event_callback=event_callback,
+            )
+            await self._emit(
+                event_callback,
+                "result",
+                {
+                    "status": "completed",
+                    "result": result.get("result"),
+                    "cache_hit": result.get("cache_hit", False),
+                    "latency": result.get("latency", {}),
+                },
+            )
+            await self._emit(event_callback, "status_change", {"status": "completed"})
+            return result
+        except Exception as exc:
+            await self._persist_trace(
+                request_id,
+                {
+                    "request_id": request_id,
+                    "session_id": session_id,
+                    "agent_id": agent_id,
+                    "agent_name": await self._resolve_agent_name(agent_id),
+                    "goal": goal,
+                    "plan": plan_text,
+                    "steps": [],
+                    "observations": [],
+                    "final_answer": None,
+                    "status": "failed",
+                    "cache_hit": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "started_at": started_at,
+                    "completed_at": datetime.now(timezone.utc),
+                    "timestamp": started_at,
+                },
+            )
+            await self._emit(event_callback, "error", {"error": f"{type(exc).__name__}: {exc}"})
+            await self._emit(event_callback, "status_change", {"status": "failed", "error": f"{type(exc).__name__}: {exc}"})
+            raise
+
+    async def synthesize_answer(
+        self,
+        goal: str,
+        observations: list[dict[str, Any]],
+        memory_context: Optional[dict[str, Any]] = None,
+    ) -> str:
+        observation_text = ""
+        for observation in observations:
+            observation_text += (
+                f"\nStep {observation['step']} ({observation['tool']} - {observation['query']}):\n"
+                f"{observation['response'].get('data', '')}\n"
+            )
+
+        memory_text = ""
+        if memory_context:
+            recent = memory_context.get("recent_messages", [])
+            relevant = memory_context.get("relevant_memory", [])
+            if recent:
+                memory_text += "\nRecent Conversation:\n"
+                for message in recent:
+                    memory_text += f"{message.get('role')}: {message.get('content')}\n"
+            if relevant:
+                memory_text += "\nRelevant Past Memory:\n"
+                for memory in relevant:
+                    memory_text += f"{memory.get('text')}\n"
+
+        messages = [
+            {"role": "system", "content": "Use ONLY provided observations and memory. Do not invent."},
+            {
+                "role": "user",
+                "content": f"""
+Goal:
+{goal}
+
+Memory:
+{memory_text}
+
+Observations:
+{observation_text}
+""",
+            },
+        ]
+
+        response = await llm_chat(
+            self.client,
+            model=self.model_name,
+            messages=messages,
+            options={"num_ctx": 4096},
+        )
+        final_answer = response["message"]["content"]
+        if isinstance(final_answer, dict):
+            final_answer = final_answer.get("answer") if isinstance(final_answer.get("answer"), str) else json.dumps(final_answer)
         return self.policy.redact(final_answer)

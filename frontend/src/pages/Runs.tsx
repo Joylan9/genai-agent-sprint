@@ -1,53 +1,46 @@
-import { Activity, Filter, Play, Search } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Activity, Filter, Play, Search, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { EmptyState } from '../shared/ui/EmptyState';
 
-import { useRuns } from '../features/agent/hooks/useAgent';
+import { useDeleteRun, useRuns } from '../features/agent/hooks/useAgent';
 import { Button } from '../shared/ui/Button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../shared/ui/Table';
 import { TableSkeleton } from '../shared/ui/TableSkeleton';
+import { usePermission } from '../app/auth/usePermission';
 
 const StatusBadge = ({ status }: { status: string }) => {
     const styles = {
+        queued: 'bg-amber-100 text-amber-700 border-amber-200',
         running: 'bg-blue-100 text-blue-700 border-blue-200',
         completed: 'bg-green-100 text-green-700 border-green-200',
         failed: 'bg-red-100 text-red-700 border-red-200',
-        pending: 'bg-slate-100 text-slate-700 border-slate-200',
     };
 
-    const normalized = (status || 'pending').toLowerCase() as keyof typeof styles;
+    const normalized = (status || 'queued').toLowerCase() as keyof typeof styles;
     return (
-        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${styles[normalized] || styles.pending}`}>
+        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${styles[normalized] || styles.queued}`}>
             {normalized.charAt(0).toUpperCase() + normalized.slice(1)}
         </span>
     );
 };
 
-const FILTER_ORDER = ['all', 'running', 'completed', 'failed', 'pending'] as const;
+const FILTER_ORDER = ['all', 'queued', 'running', 'completed', 'failed'] as const;
 type RunFilter = typeof FILTER_ORDER[number];
 
 export const RunsListPage = () => {
     const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<RunFilter>('all');
-    const { data: runs, isLoading } = useRuns();
-
-    const filteredRuns = useMemo(() => {
-        const source = Array.isArray(runs) ? runs : [];
-        return source.filter((run: any) => {
-            const runId = String(run.id || '').toLowerCase();
-            const agentId = String(run.agent_id || '').toLowerCase();
-            const status = String(run.status || '').toLowerCase();
-
-            const matchesSearch = !searchTerm.trim()
-                || runId.includes(searchTerm.toLowerCase())
-                || agentId.includes(searchTerm.toLowerCase());
-
-            const matchesStatus = statusFilter === 'all' || status === statusFilter;
-            return matchesSearch && matchesStatus;
-        });
-    }, [runs, searchTerm, statusFilter]);
+    const { permissions } = usePermission();
+    const deleteRun = useDeleteRun();
+    const { data: runs, isLoading } = useRuns(
+        {
+            q: searchTerm.trim() || undefined,
+            status: statusFilter === 'all' ? undefined : statusFilter,
+        },
+        5000,
+    );
 
     const cycleFilterStatus = () => {
         const currentIndex = FILTER_ORDER.indexOf(statusFilter);
@@ -101,14 +94,16 @@ export const RunsListPage = () => {
                             <TableHead>Status</TableHead>
                             <TableHead>Latency</TableHead>
                             <TableHead>Started At</TableHead>
-                            <TableHead className="text-right">Result</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredRuns.map((run: any) => (
+                        {(runs || []).map((run: any) => (
                             <TableRow key={run.id}>
                                 <TableCell className="font-mono text-xs text-slate-600">{run.id}</TableCell>
-                                <TableCell className="font-medium text-slate-900">Agent {run.agent_id}</TableCell>
+                                <TableCell className="font-medium text-slate-900">
+                                    {run.agent_name || run.agent_id || 'Default Agent'}
+                                </TableCell>
                                 <TableCell>
                                     <div className="flex items-center gap-1.5">
                                         <StatusBadge status={run.status} />
@@ -129,10 +124,24 @@ export const RunsListPage = () => {
                                     <Button variant="ghost" size="sm" className="text-blue-600" onClick={() => navigate(`/runs/${run.id}`)}>
                                         View Trace
                                     </Button>
+                                    {permissions.canDeleteAgent && (
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="text-red-600"
+                                            onClick={() => {
+                                                if (window.confirm(`Delete run ${run.id}? This cannot be undone.`)) {
+                                                    deleteRun.mutate(run.id);
+                                                }
+                                            }}
+                                        >
+                                            <Trash2 size={14} />
+                                        </Button>
+                                    )}
                                 </TableCell>
                             </TableRow>
                         ))}
-                        {filteredRuns.length === 0 && !isLoading && (
+                        {(runs || []).length === 0 && !isLoading && (
                             <TableRow>
                                 <TableCell colSpan={6} className="border-0 p-0">
                                     <EmptyState
@@ -148,8 +157,8 @@ export const RunsListPage = () => {
                         )}
                         {isLoading && (
                             <TableRow>
-                                <TableCell colSpan={5} className="p-0 border-0">
-                                    <TableSkeleton rows={4} cols={5} hasHeader={false} />
+                                <TableCell colSpan={6} className="p-0 border-0">
+                                    <TableSkeleton rows={4} cols={6} hasHeader={false} />
                                 </TableCell>
                             </TableRow>
                         )}

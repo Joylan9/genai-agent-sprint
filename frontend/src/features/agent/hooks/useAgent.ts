@@ -25,6 +25,14 @@ export const useAgents = () => {
     });
 };
 
+export const useAgentVersions = (agentId: string) => {
+    return useQuery({
+        queryKey: ['agents', agentId, 'versions'],
+        queryFn: () => agentClient.getAgentVersions(agentId),
+        enabled: !!agentId,
+    });
+};
+
 export const useCreateAgent = () => {
     const queryClient = useQueryClient();
     return useMutation({
@@ -45,6 +53,30 @@ export const useUpdateAgent = () => {
     });
 };
 
+export const useCreateAgentVersion = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ agentId, version, metadata }: { agentId: string; version: string; metadata?: Record<string, any> }) =>
+            agentClient.createAgentVersion(agentId, { version, metadata }),
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['agents'] });
+            queryClient.invalidateQueries({ queryKey: ['agents', variables.agentId, 'versions'] });
+        },
+    });
+};
+
+export const usePromoteAgentVersion = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ agentId, version }: { agentId: string; version: string }) =>
+            agentClient.promoteAgentVersion(agentId, version),
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['agents'] });
+            queryClient.invalidateQueries({ queryKey: ['agents', variables.agentId, 'versions'] });
+        },
+    });
+};
+
 export const useRunAgent = () => {
     const queryClient = useQueryClient();
     return useMutation({
@@ -55,10 +87,11 @@ export const useRunAgent = () => {
     });
 };
 
-export const useRuns = () => {
+export const useRuns = (filters?: { q?: string; status?: string }, refetchInterval?: number | false) => {
     return useQuery({
-        queryKey: ['runs'],
-        queryFn: () => agentClient.listRuns(),
+        queryKey: ['runs', filters],
+        queryFn: () => agentClient.listRuns(filters),
+        refetchInterval,
     });
 };
 

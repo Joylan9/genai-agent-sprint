@@ -5,12 +5,12 @@ MongoDB connection layer for Enterprise Memory System.
 Production-safe, singleton async client. No side-effects at import time.
 """
 
-import os
 from typing import Optional
 
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import ASCENDING
+from app.config.runtime import mongodb_db, mongodb_uri
 
 # Load .env once (safe to call on import)
 load_dotenv()
@@ -29,8 +29,8 @@ class MongoDB:
         This is synchronous so it is safe to call from non-async startup handlers.
         """
         if cls._client is None:
-            mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-            db_name = os.getenv("MONGODB_DB", "agent_memory")
+            mongo_uri = mongodb_uri()
+            db_name = mongodb_db()
 
             if not mongo_uri or not db_name:
                 raise RuntimeError("MongoDB configuration missing in .env")
@@ -76,6 +76,22 @@ class MongoDB:
         await db.users.create_index([("email", ASCENDING)], unique=True)
         await db.users.create_index([("created_at", ASCENDING)])
 
+        # Password reset flow
+        await db.password_resets.create_index([("email", ASCENDING)], unique=True)
+        await db.password_resets.create_index([("expires_at", ASCENDING)], expireAfterSeconds=0)
+
         # Run events collection indexes (Phase 2: SSE)
         await db.run_events.create_index([("run_id", ASCENDING)])
         await db.run_events.create_index([("timestamp", ASCENDING)])
+
+        # Response cache (L2)
+        await db.response_cache.create_index([("expires_at", ASCENDING)], expireAfterSeconds=0)
+        await db.response_cache.create_index([("_id", ASCENDING)], unique=True)
+
+        # Agent version history
+        await db.agent_versions.create_index([("agent_id", ASCENDING), ("version", ASCENDING)], unique=True)
+        await db.agent_versions.create_index([("agent_id", ASCENDING), ("created_at", ASCENDING)])
+
+        # Evaluation results
+        await db.eval_results.create_index([("suite_id", ASCENDING)], unique=True)
+        await db.eval_results.create_index([("timestamp", ASCENDING)])

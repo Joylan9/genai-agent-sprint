@@ -1,12 +1,13 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useTrace } from '../features/agent/hooks/useAgent';
+import { agentClient } from '../features/agent/api/agentClient';
 import { Button } from '../shared/ui/Button';
 import { Badge } from '../shared/ui/Badge';
 import { ChevronLeft, Clock, CheckCircle2, XCircle, FileJson, List, Info, Activity, Zap, Copy, Check } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { cn } from '../shared/lib/utils';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { RunTimeline } from '../shared/ui/RunTimeline';
 import { ErrorPanel } from '../shared/ui/ErrorPanel';
 
@@ -164,8 +165,73 @@ export const RunDetailsPage = () => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState<'trace' | 'logs' | 'artifacts'>('trace');
     const [linkCopied, setLinkCopied] = useState(false);
+    const [traceData, setTraceData] = useState<any>(null);
+    const [liveEvents, setLiveEvents] = useState<Array<{ type: string; data: Record<string, any>; at: string }>>([]);
 
     const { data: trace, isLoading, error } = useTrace(id || '');
+
+    useEffect(() => {
+        if (trace) {
+            setTraceData(trace);
+        }
+    }, [trace]);
+
+    useEffect(() => {
+        if (!id || !traceData || !['queued', 'running'].includes(String(traceData.status || '').toLowerCase())) {
+            return;
+        }
+
+        let cancelled = false;
+        let pollHandle: number | null = null;
+        const syncTrace = async () => {
+            const latest = await agentClient.getTrace(id);
+            if (!cancelled) {
+                setTraceData(latest);
+            }
+        };
+
+        const appendEvent = (type: string, data: Record<string, any>) => {
+            if (cancelled) return;
+            setLiveEvents((prev) => [...prev, { type, data, at: new Date().toISOString() }]);
+        };
+
+        const stream = new EventSource(agentClient.getRunStreamUrl(id));
+        const eventTypes = ['status_change', 'planner_start', 'planner_complete', 'execution_start', 'tool_start', 'tool_complete', 'execution_complete', 'synthesis_start', 'synthesis_complete', 'result', 'error'];
+        eventTypes.forEach((eventType) => {
+            stream.addEventListener(eventType, async (event) => {
+                const payload = JSON.parse(event.data);
+                appendEvent(eventType, payload);
+                if (eventType === 'status_change') {
+                    setTraceData((prev: any) => ({ ...prev, status: payload.status || prev?.status, error: payload.error || prev?.error }));
+                }
+                if (eventType === 'result') {
+                    setTraceData((prev: any) => ({ ...prev, final_answer: payload.result || prev?.final_answer }));
+                }
+                if (eventType === 'result' || (eventType === 'status_change' && ['completed', 'failed'].includes(payload.status))) {
+                    await syncTrace();
+                    stream.close();
+                    if (pollHandle) {
+                        window.clearInterval(pollHandle);
+                    }
+                }
+            });
+        });
+        stream.onerror = () => {
+            stream.close();
+            if (pollHandle) return;
+            pollHandle = window.setInterval(async () => {
+                await syncTrace();
+            }, 2000);
+        };
+
+        return () => {
+            cancelled = true;
+            stream.close();
+            if (pollHandle) {
+                window.clearInterval(pollHandle);
+            }
+        };
+    }, [id, traceData?.status]);
 
     if (isLoading)
         return <div className="p-8 text-center text-slate-500">Loading trace data...</div>;
@@ -176,13 +242,14 @@ export const RunDetailsPage = () => {
             </div>
         );
 
-    const observations = trace?.observations || [];
-    const latency = trace?.latency;
+    const currentTrace = traceData || trace;
+    const observations = currentTrace?.observations || [];
+    const latency = currentTrace?.latency;
     const totalDuration = latency?.total ? `${latency.total.toFixed(2)}s` : 'N/A';
-    const startedAt = trace?.timestamp
-        ? new Date(trace.timestamp).toLocaleString()
+    const startedAt = currentTrace?.started_at || currentTrace?.timestamp
+        ? new Date(currentTrace.started_at || currentTrace.timestamp).toLocaleString()
         : 'Unknown';
-    const cacheHit = trace?.cache_hit === true;
+    const cacheHit = currentTrace?.cache_hit === true;
 
     return (
         <div className="space-y-6 max-w-5xl mx-auto pb-12">
@@ -237,19 +304,19 @@ export const RunDetailsPage = () => {
             </div>
 
             {/* Goal */}
-            {trace?.goal && (
+            {currentTrace?.goal && (
                 <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
                     <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Goal</span>
-                    <p className="text-slate-900 mt-1">{trace.goal}</p>
+                    <p className="text-slate-900 mt-1">{currentTrace.goal}</p>
                 </div>
             )}
 
             {/* Error Panel for failed runs */}
-            {(trace?.status === 'failed' || trace?.error) && (
+            {(currentTrace?.status === 'failed' || currentTrace?.error) && (
                 <ErrorPanel
-                    error={trace?.error || 'Unknown error'}
-                    goal={trace?.goal}
-                    onRetry={() => navigate(`/execute${trace?.goal ? `?goal=${encodeURIComponent(trace.goal)}` : ''}`)}
+                    error={currentTrace?.error || 'Unknown error'}
+                    goal={currentTrace?.goal}
+                    onRetry={() => navigate(`/execute${currentTrace?.goal ? `?goal=${encodeURIComponent(currentTrace.goal)}` : ''}`)}
                 />
             )}
 
@@ -257,7 +324,7 @@ export const RunDetailsPage = () => {
             <RunTimeline
                 latency={latency}
                 observations={observations}
-                status={trace?.status}
+                status={currentTrace?.status}
             />
 
             {/* Latency Breakdown */}
@@ -358,12 +425,29 @@ export const RunDetailsPage = () => {
                                 style={vscDarkPlus}
                                 customStyle={{ margin: 0 }}
                             >
-                                {JSON.stringify(trace, null, 2)}
+                                {JSON.stringify(currentTrace, null, 2)}
                             </SyntaxHighlighter>
                         </div>
                     </div>
                 )}
             </div>
+
+            {liveEvents.length > 0 && (
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-3">Live Event Feed</h3>
+                    <div className="space-y-2">
+                        {liveEvents.map((event, index) => (
+                            <div key={`${event.type}-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+                                <div className="flex items-center justify-between text-slate-500">
+                                    <span className="font-semibold uppercase tracking-wider">{event.type}</span>
+                                    <span>{new Date(event.at).toLocaleTimeString()}</span>
+                                </div>
+                                <pre className="mt-2 whitespace-pre-wrap text-slate-700">{JSON.stringify(event.data, null, 2)}</pre>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Info Banner */}
             <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 flex gap-4">

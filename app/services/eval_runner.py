@@ -27,7 +27,12 @@ class EvalRunner:
     def __init__(self):
         self.db = MongoDB.get_database()
 
-    async def run_suite(self, test_cases: list[dict], suite_name: str = "default") -> dict:
+    async def run_suite(
+        self,
+        test_cases: list[dict],
+        suite_name: str = "default",
+        suite_source: str | None = None,
+    ) -> dict:
         """
         Execute all test cases and return aggregated results.
 
@@ -57,6 +62,7 @@ class EvalRunner:
         suite_result = {
             "suite_id": suite_id,
             "suite_name": suite_name,
+            "suite_source": suite_source,
             "total": len(results),
             "passed": sum(1 for r in results if r["passed"]),
             "failed": sum(1 for r in results if not r["passed"]),
@@ -84,8 +90,7 @@ class EvalRunner:
             from api.dependencies import build_agent
             agent = build_agent()
 
-            plan = await agent.create_plan(goal, session_id=f"eval-{case_id}")
-            result = await agent.execute_plan(f"eval-{case_id}", goal, plan)
+            result = await agent.run_goal(f"eval-{case_id}", goal)
 
             latency = time.time() - start
             answer = result.get("result", "")
@@ -119,6 +124,8 @@ class EvalRunner:
                 "answer_preview": answer[:500] if answer else None,
                 "tools_used": [obs.get("tool") for obs in observations],
                 "expected_tools": expected_tools,
+                "failure_reason": None,
+                "trace_request_id": result.get("request_id"),
                 "error": None,
             }
 
@@ -137,6 +144,8 @@ class EvalRunner:
                 "answer_preview": None,
                 "tools_used": [],
                 "expected_tools": expected_tools,
+                "failure_reason": str(e),
+                "trace_request_id": None,
                 "error": str(e),
             }
 

@@ -12,6 +12,7 @@ import { Input } from '../../../shared/ui/Input';
 import { Modal } from '../../../shared/ui/Modal';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../shared/ui/Table';
 import { useNavigate } from 'react-router-dom';
+import { usePermission } from '../../../app/auth/usePermission';
 
 const agentSchema = z.object({
     name: z.string().min(3, 'Name must be at least 3 characters'),
@@ -43,6 +44,7 @@ export const AgentListPage = () => {
     const updateAgent = useUpdateAgent();
     const deleteAgentMutation = useDeleteAgent();
     const navigate = useNavigate();
+    const { permissions } = usePermission();
     const [editingAgent, setEditingAgent] = useState<AgentRecord | null>(null);
 
     const {
@@ -153,14 +155,16 @@ export const AgentListPage = () => {
                     <Button variant="outline" size="sm" onClick={() => refetch()} className="hidden sm:flex">
                         <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
                     </Button>
-                    <Button size="sm" onClick={() => {
-                        setEditingAgent(null);
-                        reset({ name: '', version: '1.0.0', description: '' });
-                        setIsModalManuallyOpen(true);
-                    }} className="flex items-center gap-2">
-                        <Plus size={18} />
-                        <span>Create Agent</span>
-                    </Button>
+                    {permissions.canCreateAgent && (
+                        <Button size="sm" onClick={() => {
+                            setEditingAgent(null);
+                            reset({ name: '', version: '1.0.0', description: '' });
+                            setIsModalManuallyOpen(true);
+                        }} className="flex items-center gap-2">
+                            <Plus size={18} />
+                            <span>Create Agent</span>
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -218,20 +222,26 @@ export const AgentListPage = () => {
                                     </span>
                                 </TableCell>
                                 <TableCell className="text-right space-x-1">
-                                    <Button variant="ghost" size="sm" onClick={() => handleEdit(agent)}>Edit</Button>
-                                    <Button variant="ghost" size="sm" className="text-blue-600" onClick={() => handleDeploy(agent)}>Deploy</Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="text-red-500 hover:text-red-700"
-                                        onClick={() => {
-                                            if (window.confirm(`Delete agent "${agent.name}"? This cannot be undone.`)) {
-                                                deleteAgentMutation.mutate(agent.id);
-                                            }
-                                        }}
-                                    >
-                                        Delete
-                                    </Button>
+                                    {permissions.canCreateAgent && (
+                                        <Button variant="ghost" size="sm" onClick={() => handleEdit(agent)}>Edit</Button>
+                                    )}
+                                    {permissions.canRunAgent && (
+                                        <Button variant="ghost" size="sm" className="text-blue-600" onClick={() => handleDeploy(agent)}>Deploy</Button>
+                                    )}
+                                    {permissions.canDeleteAgent && (
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="text-red-500 hover:text-red-700"
+                                            onClick={() => {
+                                                if (window.confirm(`Delete agent "${agent.name}"? This cannot be undone.`)) {
+                                                    deleteAgentMutation.mutate(agent.id);
+                                                }
+                                            }}
+                                        >
+                                            Delete
+                                        </Button>
+                                    )}
                                 </TableCell>
                             </TableRow>
                         ))}
@@ -242,8 +252,8 @@ export const AgentListPage = () => {
                                         icon={Bot}
                                         title={query ? 'No agents match your search' : 'No agents created yet'}
                                         description={query ? 'Try a different search term or clear your filters.' : 'Create your first AI agent to start orchestrating intelligent workflows.'}
-                                        actionLabel={query ? undefined : 'Create Agent'}
-                                        onAction={query ? undefined : () => {
+                                        actionLabel={query || !permissions.canCreateAgent ? undefined : 'Create Agent'}
+                                        onAction={query || !permissions.canCreateAgent ? undefined : () => {
                                             setEditingAgent(null);
                                             reset({ name: '', version: '1.0.0', description: '' });
                                             setIsModalManuallyOpen(true);

@@ -27,9 +27,10 @@ import json
 from datetime import datetime, timezone
 from typing import AsyncGenerator
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
+from app.api.auth import get_current_user_from_access_token
 from app.memory.database import MongoDB
 
 router = APIRouter(tags=["streaming"])
@@ -84,25 +85,17 @@ async def _event_generator(run_id: str) -> AsyncGenerator[str, None]:
                 if event.get("event") == "status_change":
                     status = event.get("data", {}).get("status")
                     if status in ("completed", "failed"):
-                        # Send final trace data
-                        trace = await db.traces.find_one({"request_id": run_id})
-                        if trace:
-                            final_data = {
-                                "status": status,
-                                "result": trace.get("final_answer"),
-                                "error": trace.get("error"),
-                                "latency": trace.get("latency"),
-                                "cache_hit": trace.get("cache_hit", False),
-                            }
-                            yield _serialize_event("result", final_data)
-                        yield _serialize_event("done", {"status": status})
                         return
 
         await asyncio.sleep(_POLL_INTERVAL)
 
 
 @router.get("/api/runs/{run_id}/stream")
-async def stream_run_events(run_id: str):
+async def stream_run_events(
+    run_id: str,
+    request: Request,
+    access_token: str | None = Query(default=None),
+):
     """
     SSE endpoint for real-time run progress.
 
@@ -112,6 +105,12 @@ async def stream_run_events(run_id: str):
             console.log(JSON.parse(e.data));
         });
     """
+    bearer_token = access_token
+    if not bearer_token:
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            bearer_token = auth_header.split(" ", 1)[1].strip()
+    await get_current_user_from_access_token(bearer_token)
     db = MongoDB.get_database()
     trace = await db.traces.find_one({"request_id": run_id})
     if not trace:

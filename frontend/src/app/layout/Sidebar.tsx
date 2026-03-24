@@ -87,7 +87,9 @@ export const Sidebar = () => {
         .join('')
         .toUpperCase()
         .slice(0, 2);
-    const roleLabel = isAuthenticated ? 'Authenticated' : 'Master Node';
+    const roleLabel = isAuthenticated
+        ? (user?.dev_bypass ? `Dev ${String(user.role).toUpperCase()}` : String(user?.role || 'viewer').toUpperCase())
+        : 'Guest';
 
     return (
         <aside

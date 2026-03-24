@@ -1,3 +1,57 @@
+# TraceAI Enterprise Control Plane
+
+This section is the current source of truth for the production contract and supersedes older API-key-era guidance later in this file.
+
+## Current architecture
+- Canonical backend entrypoint: `app.api_app:app`
+- Compatibility shim: `api.app`
+- Primary execution UX: queued runs via `POST /api/runs/submit` plus SSE or polling
+- Compatibility/debug path: `POST /agent/run`
+- Auth model: JWT bearer tokens with optional explicit development bypass
+- Canonical run statuses: `queued | running | completed | failed`
+- Canonical Mongo env vars: `MONGODB_URI`, `MONGODB_DB`
+
+## Key APIs
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/refresh`
+- `GET /api/auth/me`
+- `GET /api/agents`
+- `POST /api/agents`
+- `GET /api/agents/{id}/versions`
+- `POST /api/agents/{id}/versions`
+- `POST /api/agents/{id}/versions/{version}/promote`
+- `POST /api/runs/submit`
+- `GET /api/runs`
+- `GET /api/runs/{id}/status`
+- `GET /traces/{id}`
+- `GET /api/runs/{id}/stream`
+- `GET /api/eval/suites`
+- `POST /api/eval/run-suite`
+- `GET /health`
+- `GET /ready`
+
+## Authentication
+- Protected routes expect `Authorization: Bearer <access_token>`.
+- Auth responses include `user.role` with `admin | developer | viewer`.
+- Development bypass is only available when `AUTH_DEV_BYPASS_ENABLED=true`.
+- OTP echo is only available when `DEV_EMAIL_OTP_ECHO_ENABLED=true`.
+
+## Local verification
+```bash
+python -m pytest
+cd frontend
+npx tsc --noEmit
+npm run build
+```
+
+## Known environment blockers in this workspace
+- Backend pytest collection still depends on installing missing Python packages in a proper venv.
+- `npm run build` and `npm test` require running outside this sandbox because `esbuild` spawn is blocked here.
+- Figma export remains blocked until the MCP session is re-authenticated to an editor-capable Figma seat.
+
+---
+
 <div align="center">
 
 <!-- HERO BANNER -->

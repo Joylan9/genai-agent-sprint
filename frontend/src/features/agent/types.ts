@@ -1,11 +1,13 @@
 export interface AgentRequest {
     session_id: string;
     goal: string;
+    agent_id?: string;
 }
 
 export interface AgentResponse {
     result: string;
     request_id?: string;
+    status?: string;
 }
 
 export interface ApiError {
@@ -24,7 +26,8 @@ export interface HealthStatus {
 
 export interface ReadinessStatus {
     status: 'ready' | 'degraded' | 'not_ready' | string;
-    checks?: Record<string, 'ready' | 'unavailable' | string>;
+    checks?: Record<string, { status: string; optional?: boolean; detail?: string } | string>;
+    features?: Record<string, boolean>;
 }
 
 // Future-proofing for blueprint requirements (mocked for now)
@@ -32,17 +35,37 @@ export interface Agent {
     id: string;
     name: string;
     version: string;
+    current_version?: string;
     description?: string;
+    status?: string;
+    metadata?: Record<string, any>;
     created_at: string;
+    updated_at?: string | null;
+    versions?: AgentVersion[];
+}
+
+export interface AgentVersion {
+    agent_id: string;
+    version: string;
+    name?: string;
+    description?: string;
+    status?: string;
+    metadata?: Record<string, any>;
+    created_at?: string | null;
+    snapshot?: Record<string, any>;
 }
 
 export interface Run {
     id: string;
     agent_id: string;
-    status: 'pending' | 'running' | 'completed' | 'failed';
+    agent_name?: string;
+    status: 'queued' | 'running' | 'completed' | 'failed';
+    goal?: string;
     started_at: string;
     completed_at?: string;
-    result?: string;
+    cache_hit?: boolean;
+    latency_total?: number;
+    error?: string | null;
 }
 
 export interface Trace {
@@ -73,6 +96,8 @@ export interface Trace {
         synthesis: number;
         total: number;
     };
+    started_at?: string;
+    completed_at?: string;
     timestamp?: string;
     metadata?: Record<string, any>;
 }

@@ -26,7 +26,7 @@ interface Segment {
     label: string;
     phase: 'planner' | 'tool' | 'synthesis';
     duration: number;
-    status: 'success' | 'error' | 'running' | 'pending';
+    status: 'success' | 'error' | 'running' | 'queued';
     color: string;
     bgColor: string;
     icon: typeof Brain;

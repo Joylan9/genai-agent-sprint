@@ -3,7 +3,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import { queryClient } from '../queryClient';
 import { GlobalErrorBoundary } from '../errors/GlobalErrorBoundary';
-import { AuthProvider } from './AuthProvider';
+import { AuthProvider } from '../auth/AuthContext';
 import { FeatureFlagProvider } from './FeatureFlagProvider';
 
 interface AppProvidersProps {

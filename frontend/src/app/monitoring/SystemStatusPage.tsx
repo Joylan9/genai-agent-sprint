@@ -34,10 +34,12 @@ export function SystemStatusPage() {
     }
 
     const cards = [
-        { name: 'Gateway (Nginx)', key: 'frontend', val: status.frontend },
+        { name: 'Gateway (Frontend)', key: 'frontend', val: status.frontend },
         { name: 'API Services (FastAPI)', key: 'api', val: status.api },
         { name: 'Inference Engine (Ollama)', key: 'llm', val: status.llm },
         { name: 'Vector DB (MongoDB)', key: 'vector', val: status.vector },
+        { name: 'Queue/Broker (Redis/Celery)', key: 'redis', val: status.redis },
+        { name: 'Web Search Feature', key: 'webSearch', val: status.webSearch },
     ];
 
     const allOk = cards.every(c => c.val === 'ok');
@@ -63,10 +65,10 @@ export function SystemStatusPage() {
                         </h2>
                         <span className="text-sm flex items-center text-gray-600 mt-0.5">
                             <Clock className="w-3.5 h-3.5 mr-1" />
-                            Global Latency: {status.latency}ms
-                        </span>
-                    </div>
-                </div>
+                    Global Latency: {status.latency}ms
+                </span>
+            </div>
+        </div>
                 <button
                     onClick={() => refetch()}
                     disabled={isRefetching}
@@ -124,9 +126,12 @@ function StatusCard({ name, status, remediation }: { name: string, status: Statu
 function getRemediation(key: string, status: string): string | null {
     if (status === 'ok') return null;
     switch (key) {
-        case 'api': return 'Check `genai-api` container logs. Ensure FastAPI is running on port 8000 and the `/health` endpoint is reachable.';
+        case 'frontend': return 'Verify `/health-frontend.json` is being served by the frontend host or nginx layer.';
+        case 'api': return 'Check the API logs and confirm the canonical backend is running from `app.api_app:app` on port 8000.';
         case 'llm': return 'Ollama is unresponsive or missing the required model payload. Run `docker logs genai-api` for connection traces.';
-        case 'vector': return 'MongoDB connection is failing. Verify `MONGO_URI` and ensure `genai-mongo` container is healthy.';
+        case 'vector': return 'MongoDB connection is failing. Verify `MONGODB_URI` and ensure `genai-mongo` is healthy.';
+        case 'redis': return 'Redis or Celery is unavailable. Verify `CELERY_BROKER_URL` and ensure the queue worker is running.';
+        case 'webSearch': return 'Web search is optional. Configure `SERPAPI_KEY` if you want online search enabled.';
         default: return 'Contact system administrator.';
     }
 }

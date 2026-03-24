@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { agentClient } from '../features/agent/api/agentClient';
 import { Button } from '../shared/ui/Button';
 import { Badge } from '../shared/ui/Badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../shared/ui/Table';
 import { Play, CheckCircle2, XCircle, Clock, BarChart3, RefreshCw, Zap } from 'lucide-react';
 import { EmptyState } from '../shared/ui/EmptyState';
+import { usePermission } from '../app/auth/usePermission';
 
 interface EvalCase {
     case_id: string;
@@ -50,15 +52,41 @@ const ScoreBar = ({ score, label }: { score: number; label: string }) => (
 );
 
 export const EvalPage = () => {
+    const [searchParams] = useSearchParams();
+    const { permissions } = usePermission();
     const [suiteHistory, setSuiteHistory] = useState<any[]>([]);
     const [activeResult, setActiveResult] = useState<EvalSuite | null>(null);
     const [running, setRunning] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [availableSuites, setAvailableSuites] = useState<Array<{ name: string; path: string }>>([]);
+    const [selectedSuite, setSelectedSuite] = useState('default');
+    const [errorMessage, setErrorMessage] = useState('');
 
     // Load past results
     useEffect(() => {
         loadHistory();
     }, []);
+
+    useEffect(() => {
+        const loadSuites = async () => {
+            try {
+                const suites = await agentClient.listEvalSuites();
+                setAvailableSuites(suites);
+                if (suites.length > 0 && !suites.find((suite) => suite.name === selectedSuite)) {
+                    setSelectedSuite(suites[0].name);
+                }
+            } catch {
+                // ignore
+            }
+        };
+        loadSuites();
+    }, []);
+
+    useEffect(() => {
+        if (searchParams.get('run') === '1' && !running && permissions.canRunAgent) {
+            runSuite();
+        }
+    }, [searchParams, permissions.canRunAgent]);
 
     const loadHistory = async () => {
         try {
@@ -72,13 +100,14 @@ export const EvalPage = () => {
     };
 
     const runSuite = async () => {
+        setErrorMessage('');
         setRunning(true);
         try {
-            const result = await agentClient.runEvalSuite('manual-run');
+            const result = await agentClient.runEvalSuite(selectedSuite || 'default');
             setActiveResult(result);
             await loadHistory();
         } catch (e: any) {
-            alert(`Eval failed: ${e.message}`);
+            setErrorMessage(e?.message || 'Evaluation failed');
         } finally {
             setRunning(false);
         }
@@ -105,22 +134,41 @@ export const EvalPage = () => {
                         Run test suites to measure agent quality, accuracy, and performance
                     </p>
                 </div>
-                <Button
-                    onClick={runSuite}
-                    disabled={running}
-                    className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white"
-                >
-                    {running ? (
-                        <>
-                            <RefreshCw size={16} className="animate-spin" /> Running...
-                        </>
-                    ) : (
-                        <>
-                            <Play size={16} /> Run Test Suite
-                        </>
-                    )}
-                </Button>
+                <div className="flex items-center gap-3">
+                    <select
+                        value={selectedSuite}
+                        onChange={(event) => setSelectedSuite(event.target.value)}
+                        className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm"
+                    >
+                        {availableSuites.map((suite) => (
+                            <option key={suite.name} value={suite.name}>
+                                {suite.name}
+                            </option>
+                        ))}
+                    </select>
+                    <Button
+                        onClick={runSuite}
+                        disabled={running || !permissions.canRunAgent}
+                        className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white"
+                    >
+                        {running ? (
+                            <>
+                                <RefreshCw size={16} className="animate-spin" /> Running...
+                            </>
+                        ) : (
+                            <>
+                                <Play size={16} /> Run Test Suite
+                            </>
+                        )}
+                    </Button>
+                </div>
             </div>
+
+            {errorMessage && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {errorMessage}
+                </div>
+            )}
 
             {/* Active Result */}
             {activeResult && (

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../app/auth/AuthContext';
+import { useFeatureFlags } from '../app/providers/FeatureFlagProvider';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '../shared/ui/Button';
 import { Input } from '../shared/ui/Input';
@@ -20,6 +21,7 @@ const PLATFORM_FEATURES = [
 
 export const LoginPage = () => {
     const { login, register } = useAuth();
+    const { flags } = useFeatureFlags();
     const navigate = useNavigate();
 
     const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -277,16 +279,18 @@ export const LoginPage = () => {
                     </div>
 
                     {/* Dev mode skip */}
-                    <div className="mt-6 text-center">
-                        <button
-                            type="button"
-                            onClick={() => navigate('/')}
-                            className="inline-flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-400 transition-colors group"
-                        >
-                            <span className="w-1 h-1 rounded-full bg-slate-700 group-hover:bg-amber-500 transition-colors" />
-                            Continue without authentication (dev mode)
-                        </button>
-                    </div>
+                    {flags.authDevBypassEnabled && (
+                        <div className="mt-6 text-center">
+                            <button
+                                type="button"
+                                onClick={() => navigate('/')}
+                                className="inline-flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-400 transition-colors group"
+                            >
+                                <span className="w-1 h-1 rounded-full bg-slate-700 group-hover:bg-amber-500 transition-colors" />
+                                Continue without authentication (dev bypass)
+                            </button>
+                        </div>
+                    )}
 
                     {/* Security badge */}
                     <div className="mt-4 flex items-center justify-center gap-4 text-[11px] text-slate-700">

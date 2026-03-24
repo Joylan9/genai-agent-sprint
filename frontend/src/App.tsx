@@ -10,17 +10,17 @@ import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { EvalPage } from './pages/EvalPage';
 import { AppShell } from './app/layout/AppShell';
 import { SystemStatusPage } from './app/monitoring/SystemStatusPage';
-import { AuthProvider } from './app/auth/AuthContext';
+import { ProtectedRoute } from './app/auth/ProtectedRoute';
 
 const App = () => {
   return (
-    <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route
-          path="/*"
-          element={
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route
+        path="/*"
+        element={
+          <ProtectedRoute>
             <AppShell>
               <Routes>
                 <Route path="/" element={<Dashboard />} />
@@ -33,10 +33,10 @@ const App = () => {
                 <Route path="/status" element={<SystemStatusPage />} />
               </Routes>
             </AppShell>
-          }
-        />
-      </Routes>
-    </AuthProvider>
+          </ProtectedRoute>
+        }
+      />
+    </Routes>
   );
 };
 
