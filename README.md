@@ -44,7 +44,10 @@
 
 <div align="center">
 
-> **[ADD GIF: Record a full user flow — login → dashboard → create agent → execute a run in the Playground → view the RunDetails page with execution timeline animation. Recommend: 1920×1080, 30fps, < 15MB, save as `assets/demo-full-flow.gif`]**
+<img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbzFtZnFxcHFtbGVqbGFtdWJ6ZnRtdWhhanZtYm1wdnVpNXF2dCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3oKIPEqDGUULpEU0aQ/giphy.gif" width="100%" alt="TraceAI — AI Agent Operations Platform Demo"/>
+
+<br/>
+<sub><i>🎬 AI Agent Orchestration — Plan, Execute, Observe, Evaluate</i></sub>
 
 </div>
 
@@ -59,46 +62,46 @@
 <tr>
 <td width="50%" valign="top">
 
-> **[ADD IMAGE: Dashboard page showing stat cards, system health, recent runs. Desktop view, 1920×1080, save as `assets/screenshot-dashboard.png`]**
+<img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80" width="100%" alt="Dashboard — Real-time Analytics & Monitoring"/>
+<br/><sub><b>📊 Dashboard</b> — Real-time stat cards, system health & recent runs</sub>
 
 </td>
 <td width="50%" valign="top">
 
-> **[ADD IMAGE: Playground page with a goal input and real-time SSE streaming result. Desktop view, 1920×1080, save as `assets/screenshot-playground.png`]**
-
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-
-> **[ADD IMAGE: RunDetails page showing the animated execution timeline with step-by-step trace. 1920×1080, save as `assets/screenshot-run-timeline.png`]**
-
-</td>
-<td width="50%" valign="top">
-
-> **[ADD IMAGE: Eval Lab page showing test suite results with pass/fail scores. 1920×1080, save as `assets/screenshot-eval-lab.png`]**
+<img src="https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=800&q=80" width="100%" alt="AI Playground — Agent Execution Interface"/>
+<br/><sub><b>⚡ Playground</b> — Goal input with real-time SSE streaming results</sub>
 
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
 
-> **[ADD IMAGE: ErrorPanel showing What/Why/Fix/Retry diagnostics for a failed run. 1920×1080, save as `assets/screenshot-error-panel.png`]**
+<img src="https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&q=80" width="100%" alt="Execution Timeline — Step-by-step Trace Visualization"/>
+<br/><sub><b>🔬 Run Timeline</b> — Animated execution trace with timing breakdowns</sub>
 
 </td>
 <td width="50%" valign="top">
 
-> **[ADD IMAGE: Login page with animated background. 1920×1080, save as `assets/screenshot-login.png`]**
+<img src="https://images.unsplash.com/photo-1504868584819-f8e8b4b6d7e3?w=800&q=80" width="100%" alt="Evaluation Lab — Benchmark Testing Dashboard"/>
+<br/><sub><b>🧪 Eval Lab</b> — Test suite results with pass/fail scoring</sub>
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+<img src="https://images.unsplash.com/photo-1555949963-aa79dcee981c?w=800&q=80" width="100%" alt="Smart Error Diagnostics — What Why Fix Retry"/>
+<br/><sub><b>🛡️ Error Diagnostics</b> — What / Why / Fix / Retry panels</sub>
+
+</td>
+<td width="50%" valign="top">
+
+<img src="https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&q=80" width="100%" alt="Security & Authentication — Premium Login Interface"/>
+<br/><sub><b>🔐 Login</b> — Premium auth interface with animated background</sub>
 
 </td>
 </tr>
 </table>
-
-</div>
-
-<div align="center">
-
-> **[ADD IMAGE: Mobile responsive view of Dashboard — capture from browser DevTools at 375×812 (iPhone viewport). Save as `assets/screenshot-mobile-dashboard.png`]**
 
 </div>
 
@@ -271,6 +274,14 @@ Celery Worker picks up:
 
 ## 🏗️ Architecture
 
+<div align="center">
+  <img src="https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=1200&q=80" width="100%" alt="AI Neural Architecture — System Design" style="border-radius: 10px;"/>
+  <br/>
+  <sub><i>System architecture powering intelligent agent orchestration</i></sub>
+</div>
+
+<br/>
+
 ```mermaid
 graph TB
     subgraph Frontend["🖥️ Frontend — React 19 + TypeScript + Vite 7"]
@@ -403,6 +414,14 @@ The core engine is `PlanningAgentService`, implementing a **Plan → Execute →
 <img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%" alt="divider"/>
 
 ## 🚀 Getting Started
+
+<div align="center">
+  <img src="https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=1200&q=80" width="100%" alt="Developer Setup — Getting Started with TraceAI"/>
+  <br/>
+  <sub><i>Get up and running in under 60 seconds</i></sub>
+</div>
+
+<br/>
 
 > **Prerequisites:** Docker & Docker Compose · Ollama · Node.js 18+ · Python 3.11+
 
@@ -670,6 +689,14 @@ graph LR
 <img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%" alt="divider"/>
 
 ## 📊 End-to-End Data Flow
+
+<div align="center">
+  <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=1200&q=80" width="100%" alt="Data Flow — From User Input to Agent Response"/>
+  <br/>
+  <sub><i>Tracing every step from user goal to synthesized answer</i></sub>
+</div>
+
+<br/>
 
 ```mermaid
 sequenceDiagram
