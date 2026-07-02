@@ -635,17 +635,11 @@ from app.config.runtime import (
     auth_dev_bypass_role,
     dev_email_otp_echo_enabled,
 )
+from app.config.settings import settings
 from app.memory.database import MongoDB
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 security = HTTPBearer(auto_error=False)
-
-JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-in-production")
-JWT_ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
-REFRESH_TOKEN_EXPIRE_DAYS = 7
-OTP_EXPIRY_MINUTES = 10
-OTP_RESEND_COOLDOWN_SECONDS = 60
 PASSWORD_SCRYPT_N = 2 ** 14
 PASSWORD_SCRYPT_R = 8
 PASSWORD_SCRYPT_P = 1
@@ -773,8 +767,17 @@ def _b64url_decode(text: str) -> bytes:
     return base64.urlsafe_b64decode(text)
 
 
+def _normalize_datetime(dt: datetime) -> datetime:
+    """Ensure a datetime object from MongoDB or Python is timezone-aware UTC."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 def _create_token(payload: dict, expires_delta: timedelta) -> str:
-    header = {"alg": JWT_ALGORITHM, "typ": "JWT"}
+    header = {"alg": settings.JWT_ALGORITHM, "typ": "JWT"}
     now = datetime.now(timezone.utc)
     full_payload = {
         **payload,
@@ -785,7 +788,7 @@ def _create_token(payload: dict, expires_delta: timedelta) -> str:
     header_b64 = _b64url_encode(json.dumps(header).encode("utf-8"))
     payload_b64 = _b64url_encode(json.dumps(full_payload).encode("utf-8"))
     signing_input = f"{header_b64}.{payload_b64}"
-    signature = hmac.new(JWT_SECRET.encode("utf-8"), signing_input.encode("utf-8"), hashlib.sha256).digest()
+    signature = hmac.new(settings.JWT_SECRET.encode("utf-8"), signing_input.encode("utf-8"), hashlib.sha256).digest()
     return f"{signing_input}.{_b64url_encode(signature)}"
 
 
@@ -796,7 +799,7 @@ def _decode_token(token: str) -> Optional[dict]:
         return None
 
     signing_input = f"{header_b64}.{payload_b64}"
-    expected_sig = hmac.new(JWT_SECRET.encode("utf-8"), signing_input.encode("utf-8"), hashlib.sha256).digest()
+    expected_sig = hmac.new(settings.JWT_SECRET.encode("utf-8"), signing_input.encode("utf-8"), hashlib.sha256).digest()
     actual_sig = _b64url_decode(sig_b64)
     if not hmac.compare_digest(expected_sig, actual_sig):
         return None
@@ -820,12 +823,12 @@ def _create_access_token(user: dict) -> str:
             "role": public_user["role"],
             "type": "access",
         },
-        timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+        timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     )
 
 
 def _create_refresh_token(user_id: str) -> str:
-    return _create_token({"sub": user_id, "type": "refresh"}, timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS))
+    return _create_token({"sub": user_id, "type": "refresh"}, timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS))
 
 
 def _build_dev_bypass_user() -> dict:
@@ -924,7 +927,7 @@ async def register(payload: RegisterRequest):
     return TokenResponse(
         access_token=_create_access_token(user),
         refresh_token=_create_refresh_token(user["_id"]),
-        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         user=_public_user(user),
     )
 
@@ -949,7 +952,7 @@ async def login(payload: LoginRequest):
     return TokenResponse(
         access_token=_create_access_token(user),
         refresh_token=_create_refresh_token(str(user["_id"])),
-        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         user=_public_user(user),
     )
 
@@ -969,7 +972,7 @@ async def refresh_token(payload: RefreshRequest):
     return TokenResponse(
         access_token=_create_access_token(user),
         refresh_token=_create_refresh_token(str(user["_id"])),
-        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         user=_public_user(user),
     )
 
@@ -979,11 +982,7 @@ async def get_me(user: dict = Depends(get_current_user)):
     return _public_user(user)
 
 
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "")
-SMTP_PASS = os.getenv("SMTP_PASS", "")
-SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USER or "noreply@traceai.dev")
+
 
 
 def _generate_otp() -> str:
@@ -991,10 +990,10 @@ def _generate_otp() -> str:
 
 
 def _is_smtp_configured() -> bool:
-    if not SMTP_USER or not SMTP_PASS:
+    if not settings.SMTP_USER or not settings.SMTP_PASS:
         return False
     placeholders = ["your-email", "your-16-char", "example.com", "changeme", "placeholder"]
-    lowered = f"{SMTP_USER} {SMTP_PASS}".lower()
+    lowered = f"{settings.SMTP_USER} {settings.SMTP_PASS}".lower()
     return not any(token in lowered for token in placeholders)
 
 
@@ -1014,7 +1013,7 @@ def _send_otp_email(to_email: str, otp: str, user_name: str = "User") -> bool:
                 {otp}
             </div>
             <p style="color: #94a3b8; margin: 24px 0 0; font-size: 13px;">
-                This code expires in {OTP_EXPIRY_MINUTES} minutes.
+                This code expires in {settings.OTP_EXPIRY_MINUTES} minutes.
             </p>
         </div>
     </div>
@@ -1023,16 +1022,17 @@ def _send_otp_email(to_email: str, otp: str, user_name: str = "User") -> bool:
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = f"TraceAI verification code: {otp}"
-        msg["From"] = f"TraceAI Platform <{SMTP_FROM}>"
+        msg["From"] = f"TraceAI Platform <{settings.SMTP_FROM}>"
         msg["To"] = to_email
         msg.attach(MIMEText(html_body, "html"))
 
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
             server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
-            server.sendmail(SMTP_FROM, to_email, msg.as_string())
+            server.login(settings.SMTP_USER, settings.SMTP_PASS)
+            server.sendmail(settings.SMTP_FROM, to_email, msg.as_string())
         return True
-    except Exception:
+    except Exception as e:
+        print(f"SMTP error sending OTP to {to_email}: {e}")
         return False
 
 
@@ -1046,11 +1046,11 @@ async def request_otp(payload: OTPRequest):
 
     existing = await db.password_resets.find_one({"email": email})
     if existing and existing.get("created_at"):
-        delta = datetime.now(timezone.utc) - existing["created_at"]
-        if delta.total_seconds() < OTP_RESEND_COOLDOWN_SECONDS:
+        delta = datetime.now(timezone.utc) - _normalize_datetime(existing["created_at"])
+        if delta.total_seconds() < settings.OTP_RESEND_COOLDOWN_SECONDS:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Please wait {OTP_RESEND_COOLDOWN_SECONDS} seconds before requesting another code.",
+                detail=f"Please wait {settings.OTP_RESEND_COOLDOWN_SECONDS} seconds before requesting another code.",
             )
 
     otp = _generate_otp()
@@ -1063,7 +1063,7 @@ async def request_otp(payload: OTPRequest):
                 "otp_hash": otp_hash,
                 "attempts": 0,
                 "created_at": now,
-                "expires_at": now + timedelta(minutes=OTP_EXPIRY_MINUTES),
+                "expires_at": now + timedelta(minutes=settings.OTP_EXPIRY_MINUTES),
                 "verified": False,
             }
         },
@@ -1073,7 +1073,7 @@ async def request_otp(payload: OTPRequest):
     email_sent = _send_otp_email(email, otp, user.get("name", "User"))
     response: dict[str, object] = {
         "message": "If an account exists with this email, a verification code has been sent.",
-        "expires_in": OTP_EXPIRY_MINUTES * 60,
+        "expires_in": settings.OTP_EXPIRY_MINUTES * 60,
     }
     if dev_email_otp_echo_enabled():
         response["dev_otp"] = otp
@@ -1093,7 +1093,7 @@ async def verify_otp(payload: OTPVerifyRequest):
     if not record:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No verification code found. Please request a new one.")
 
-    if record.get("expires_at") and record["expires_at"] < datetime.now(timezone.utc):
+    if record.get("expires_at") and _normalize_datetime(record["expires_at"]) < datetime.now(timezone.utc):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification code expired. Please request a new one.")
 
     if record.get("attempts", 0) >= 5:
