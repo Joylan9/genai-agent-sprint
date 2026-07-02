@@ -386,6 +386,31 @@ class AgentClient {
         return this.instance.post('/api/auth/reset-password', { reset_token: resetToken, new_password: newPassword });
     }
 
+    // ============================================================
+    // Administration (User Management, Stats, Clear-all)
+    // ============================================================
+
+    async listUsers(): Promise<any[]> {
+        return this.instance.get('/api/admin/users');
+    }
+
+    async updateUserRole(userId: string, role: string): Promise<any> {
+        return this.instance.patch(`/api/admin/users/${userId}/role`, { role });
+    }
+
+    async deleteUser(userId: string): Promise<void> {
+        return this.instance.delete(`/api/admin/users/${userId}`);
+    }
+
+    async getAdminStats(): Promise<any> {
+        return this.instance.get('/api/admin/stats');
+    }
+
+    async clearAllData(): Promise<any> {
+        return this.instance.post('/api/admin/clear-all');
+    }
+
+
     getAccessToken(): string | null {
         return readStoredAuth()?.access_token ?? null;
     }

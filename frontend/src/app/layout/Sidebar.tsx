@@ -131,6 +131,21 @@ export const Sidebar = () => {
                         isCollapsed={isCollapsed}
                     />
                 ))}
+                {user?.role === 'admin' && (
+                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800 mt-4">
+                        {!isCollapsed && (
+                            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest px-3 mb-3">
+                                Admin Control
+                            </p>
+                        )}
+                        <SidebarItem
+                            to="/admin"
+                            icon={Shield}
+                            label="Admin Panel"
+                            isCollapsed={isCollapsed}
+                        />
+                    </div>
+                )}
             </nav>
 
             {/* Collapse Toggle */}

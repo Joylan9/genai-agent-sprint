@@ -1140,3 +1140,122 @@ async def protected_probe(role: str = Query(default="viewer"), user: dict = Depe
     if _normalize_role(user.get("role")) not in {_normalize_role(role)}:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Role not permitted")
     return {"user": _public_user(user)}
+
+
+# ============================================================
+# ADMIN ROUTER & USER SEEDING
+# ============================================================
+
+class ChangeRoleRequest(BaseModel):
+    role: str
+
+
+async def seed_admin_user() -> dict | None:
+    """Seed the admin user from environment variables on startup."""
+    email = os.getenv("ADMIN_EMAIL")
+    password = os.getenv("ADMIN_PASSWORD")
+    name = os.getenv("ADMIN_NAME", "Super Admin")
+    if not email or not password:
+        return None
+
+    db = MongoDB.get_database()
+    existing = await db.users.find_one({"email": email.lower()})
+    if existing:
+        if _normalize_role(existing.get("role")) != "admin":
+            await db.users.update_one({"_id": existing["_id"]}, {"$set": {"role": "admin"}})
+        return existing
+
+    now = datetime.now(timezone.utc)
+    user_doc = {
+        "_id": str(uuid4()),
+        "email": email.lower(),
+        "name": name.strip(),
+        "role": "admin",
+        "password_hash": _hash_password(password),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.users.insert_one(user_doc)
+    print(f"⚡ Seeded admin user: {email}")
+    return user_doc
+
+
+@router.get("/api/admin/users")
+async def list_users(user: dict = Depends(require_role("admin"))):
+    db = MongoDB.get_database()
+    cursor = db.users.find({})
+    users = await cursor.to_list(length=1000)
+    return [_public_user(u) for u in users]
+
+
+@router.patch("/api/admin/users/{user_id}/role")
+async def update_user_role(user_id: str, payload: ChangeRoleRequest, user: dict = Depends(require_role("admin"))):
+    role = _normalize_role(payload.role)
+    db = MongoDB.get_database()
+    result = await db.users.update_one(
+        {"_id": user_id},
+        {"$set": {"role": role, "updated_at": datetime.now(timezone.utc)}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    updated = await db.users.find_one({"_id": user_id})
+    return _public_user(updated)
+
+
+@router.delete("/api/admin/users/{user_id}")
+async def delete_user(user_id: str, user: dict = Depends(require_role("admin"))):
+    if user_id == str(user["_id"]):
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    db = MongoDB.get_database()
+    result = await db.users.delete_one({"_id": user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"message": "User deleted successfully"}
+
+
+@router.get("/api/admin/stats")
+async def get_admin_stats(user: dict = Depends(require_role("admin"))):
+    db = MongoDB.get_database()
+    total_users = await db.users.count_documents({})
+    admins = await db.users.count_documents({"role": "admin"})
+    developers = await db.users.count_documents({"role": "developer"})
+    viewers = await db.users.count_documents({"role": "viewer"})
+
+    total_runs = await db.traces.count_documents({})
+    running_runs = await db.traces.count_documents({"status": "running"})
+    completed_runs = await db.traces.count_documents({"status": "completed"})
+    failed_runs = await db.traces.count_documents({"status": "failed"})
+
+    return {
+        "users": {
+            "total": total_users,
+            "admin": admins,
+            "developer": developers,
+            "viewer": viewers
+        },
+        "runs": {
+            "total": total_runs,
+            "running": running_runs,
+            "completed": completed_runs,
+            "failed": failed_runs
+        }
+    }
+
+
+@router.post("/api/admin/clear-all")
+async def clear_all_users_and_runs(user: dict = Depends(require_role("admin"))):
+    """
+    Clears all credentials (users and resets) except the current admin, and deletes all run history.
+    """
+    db = MongoDB.get_database()
+    admin_id = str(user["_id"])
+
+    await db.users.delete_many({"_id": {"$ne": admin_id}})
+    await db.password_resets.delete_many({})
+    await db.traces.delete_many({})
+    await db.run_events.delete_many({})
+    await db.agents.delete_many({})
+    await db.agent_versions.delete_many({})
+
+    return {"message": "All database records, credentials, and run histories have been cleared successfully."}
+

@@ -41,6 +41,8 @@ def _allowed_origins() -> list[str]:
 async def lifespan(application: FastAPI):
     MongoDB.connect()
     await MongoDB.initialize_indexes()
+    from app.api.auth import seed_admin_user
+    await seed_admin_user()
     yield
 
 

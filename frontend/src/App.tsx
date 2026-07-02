@@ -11,6 +11,7 @@ import { EvalPage } from './pages/EvalPage';
 import { AppShell } from './app/layout/AppShell';
 import { SystemStatusPage } from './app/monitoring/SystemStatusPage';
 import { ProtectedRoute } from './app/auth/ProtectedRoute';
+import { AdminPage } from './pages/AdminPage';
 
 const App = () => {
   return (
@@ -31,11 +32,13 @@ const App = () => {
                 <Route path="/execute" element={<PlaygroundPage />} />
                 <Route path="/eval" element={<EvalPage />} />
                 <Route path="/status" element={<SystemStatusPage />} />
+                <Route path="/admin" element={<AdminPage />} />
               </Routes>
             </AppShell>
           </ProtectedRoute>
         }
       />
+
     </Routes>
   );
 };
