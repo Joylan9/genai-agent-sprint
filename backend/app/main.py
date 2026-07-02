@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from app.services.embedding_service import EmbeddingService
 from app.core.vector_store import VectorStore
 from app.services.retriever_service import RetrieverService
@@ -5,8 +7,9 @@ from app.services.llm_service import LLMService
 from app.services.memory_service import MemoryService
 
 
-DATA_PATH = "data/sample.txt"
-STORE_PATH = "data/vector_store.pkl"
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+DATA_PATH = str(BACKEND_ROOT / "data" / "sample.txt")
+STORE_PATH = str(BACKEND_ROOT / "data" / "vector_store.pkl")
 
 
 def main():

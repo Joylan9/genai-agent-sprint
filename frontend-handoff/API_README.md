@@ -85,7 +85,7 @@ This section supersedes any older API-key guidance later in this file.
 ## Eval
 - `GET /api/eval/suites`
 - `POST /api/eval/run-suite` with `{ "suite_name": "default" }`
-- The backend only accepts suite names from the whitelist under `eval/`.
+- The backend only accepts suite names from the whitelist under `backend/eval/`.
 
 ## Monitoring
 - `GET /health` is lightweight.

@@ -1,6 +1,7 @@
 from sentence_transformers import SentenceTransformer
 import numpy as np
 from ollama import chat
+from pathlib import Path
 
 # -------------------------------
 # Load models and data (ONCE)
@@ -10,7 +11,8 @@ print("Loading embedding model...")
 embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
 print("Loading documents...")
-with open("data/sample.txt", "r", encoding="utf-8") as f:
+DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "sample.txt"
+with DATA_PATH.open("r", encoding="utf-8") as f:
     document_text = f.read()
 
 # Simple chunking by newline

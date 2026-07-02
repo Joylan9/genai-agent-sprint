@@ -4,9 +4,11 @@ from ollama import chat
 import os
 import pickle
 import hashlib
+from pathlib import Path
 
-DATA_PATH = "data/sample.txt"
-EMBEDDING_FILE = "data/vector_store.pkl"
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+DATA_PATH = str(BACKEND_ROOT / "data" / "sample.txt")
+EMBEDDING_FILE = str(BACKEND_ROOT / "data" / "vector_store.pkl")
 
 print("Loading embedding model...")
 embedding_model = SentenceTransformer("all-MiniLM-L6-v2")

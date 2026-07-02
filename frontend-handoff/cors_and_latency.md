@@ -22,7 +22,7 @@ For production, the `ORIGINS` environment variable must be updated. If the front
 
 ### Headers
 Every request MUST include:
-- `x-api-key`: Found in `.env` or `DEV_API_KEY.txt`.
+- `x-api-key`: Found in `backend/.env` or `DEV_API_KEY.txt`.
 # Current TraceAI Latency and CORS Notes
 
 This section supersedes the older API-key guidance later in the file.

@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================================================
 # MongoDB Backup Script
-# Usage: bash scripts/backup-mongo.sh
+# Usage: bash scripts/backup-mongo.sh from the backend/ directory
 # Creates a gzipped mongodump in ./backups/
 # ============================================================
 

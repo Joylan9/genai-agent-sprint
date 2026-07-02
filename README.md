@@ -3,6 +3,7 @@
 This section is the current source of truth for the production contract and supersedes older API-key-era guidance later in this file.
 
 ## Current architecture
+- Backend source and backend runtime config live under `backend/`.
 - Canonical backend entrypoint: `app.api_app:app`
 - Compatibility shim: `api.app`
 - Primary execution UX: queued runs via `POST /api/runs/submit` plus SSE or polling
@@ -39,8 +40,9 @@ This section is the current source of truth for the production contract and supe
 
 ## Local verification
 ```bash
+cd backend
 python -m pytest
-cd frontend
+cd ../frontend
 npx tsc --noEmit
 npm run build
 ```
@@ -358,13 +360,13 @@ Celery Worker picks up:
 
 | Router | File | Routes | Responsibility |
 |--------|------|--------|---------------|
-| **Auth** | `app/api/auth.py` (609 lines) | `/api/auth/*` | Register, login, refresh, profile, OTP forgot-password. Hand-rolled JWT (HMAC-SHA256), SHA-256 password hashing |
-| **Platform** | `app/api/platform.py` (330 lines) | `/api/agents/*`, `/api/runs/*` | Agent CRUD, run history with search/filter, Celery-backed async run submission, feature flags |
-| **Agent** | `app/api/agent.py` | `/agent/run` | Synchronous agent execution |
-| **Stream** | `app/api/stream.py` | `/api/runs/{id}/stream` | Server-Sent Events for real-time run progress |
-| **Eval** | `app/api/eval.py` | `/api/eval/*` | Evaluation suite execution and results |
-| **Health** | `app/observability/health.py` | `GET /health` | Basic health status |
-| **Readiness** | `app/observability/readiness.py` | `GET /ready` | Dependency health checks |
+| **Auth** | `backend/app/api/auth.py` (609 lines) | `/api/auth/*` | Register, login, refresh, profile, OTP forgot-password. Hand-rolled JWT (HMAC-SHA256), SHA-256 password hashing |
+| **Platform** | `backend/app/api/platform.py` (330 lines) | `/api/agents/*`, `/api/runs/*` | Agent CRUD, run history with search/filter, Celery-backed async run submission, feature flags |
+| **Agent** | `backend/app/api/agent.py` | `/agent/run` | Synchronous agent execution |
+| **Stream** | `backend/app/api/stream.py` | `/api/runs/{id}/stream` | Server-Sent Events for real-time run progress |
+| **Eval** | `backend/app/api/eval.py` | `/api/eval/*` | Evaluation suite execution and results |
+| **Health** | `backend/app/observability/health.py` | `GET /health` | Basic health status |
+| **Readiness** | `backend/app/observability/readiness.py` | `GET /ready` | Dependency health checks |
 
 **Auth system highlights:**
 - 8 Pydantic request/response models
@@ -421,7 +423,7 @@ Celery Worker picks up:
 | **Tool Accuracy** | 30% | Expected tools used vs. actual tools observed |
 | **LLM-as-Judge** | 40% | Same LLM scores relevance (40%), accuracy (30%), completeness (30%) |
 
-Pass threshold: overall score ≥ 50. Results stored in MongoDB `eval_results`. Test cases defined in `eval/test_cases.json` — 5 cases covering knowledge retrieval and current events.
+Pass threshold: overall score ≥ 50. Results stored in MongoDB `eval_results`. Test cases defined in `backend/eval/test_cases.json` — 5 cases covering knowledge retrieval and current events.
 
 </details>
 
@@ -573,6 +575,7 @@ build-and-package
 **1 — Infrastructure**
 
 ```bash
+cd backend
 docker compose up -d mongo redis
 ```
 
@@ -586,6 +589,7 @@ ollama pull llama3:8b-instruct-q4_K_M
 **3 — Backend**
 
 ```bash
+cd backend
 python -m venv .venv
 .venv\Scripts\Activate.ps1            # Windows PowerShell
 pip install -r requirements.txt
@@ -595,6 +599,7 @@ uvicorn app.api_app:app --reload --host 0.0.0.0 --port 8000
 **4 — Celery Worker** *(new terminal)*
 
 ```bash
+cd backend
 .venv\Scripts\Activate.ps1
 celery -A app.infra.celery_app worker --loglevel=info --concurrency=1
 ```
@@ -614,8 +619,9 @@ npm run dev
 ### 🐳 Full Docker Stack (Alternative)
 
 ```bash
+cd backend
 docker compose up -d        # Starts: MongoDB, Redis, API, Celery Worker
-cd frontend && npm run dev  # Frontend SPA (not Dockerized)
+cd ../frontend && npm run dev  # Frontend SPA (not Dockerized)
 ```
 
 <table align="center">
@@ -685,12 +691,13 @@ Contributions welcome. Fork, branch, build, test, and submit:
 git checkout -b feature/your-feature
 
 # Backend: lint, scan, test
+cd backend
 flake8 app --max-line-length=120
 bandit -r app -lll
 pytest tests/ -v
 
 # Frontend: type-check, lint, test
-cd frontend
+cd ../frontend
 npx tsc --noEmit
 npx vitest run
 

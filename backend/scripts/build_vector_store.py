@@ -2,11 +2,13 @@ import os
 import pickle
 import hashlib
 import glob
+from pathlib import Path
 from sentence_transformers import SentenceTransformer
 
 # Paths
-DOCS_DIR = "data/docs"
-STORE_PATH = "data/vector_store.pkl"
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+DOCS_DIR = str(BACKEND_ROOT / "data" / "docs")
+STORE_PATH = str(BACKEND_ROOT / "data" / "vector_store.pkl")
 MODEL_NAME = "all-MiniLM-L6-v2"
 
 def main():

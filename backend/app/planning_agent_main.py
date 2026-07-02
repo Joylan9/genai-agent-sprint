@@ -5,6 +5,7 @@ Enterprise CLI entrypoint.
 
 import sys
 import traceback
+from pathlib import Path
 
 from .infra.validators import InputValidator
 from .registry.tool_registry import ToolRegistry
@@ -24,8 +25,9 @@ from .core.vector_store import VectorStore
 from .services.retriever_service import RetrieverService
 
 
-DATA_PATH = "data/sample.txt"
-STORE_PATH = "data/vector_store.pkl"
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+DATA_PATH = str(BACKEND_ROOT / "data" / "sample.txt")
+STORE_PATH = str(BACKEND_ROOT / "data" / "vector_store.pkl")
 
 
 def initialize_registry(logger: StructuredLogger) -> ToolRegistry:

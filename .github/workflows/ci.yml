@@ -22,15 +22,19 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
           pip install flake8 pytest bandit
+        working-directory: backend
 
       - name: Lint (flake8)
         run: flake8 app --max-line-length=120 --count --show-source --statistics || true
+        working-directory: backend
 
       - name: Security scan (bandit)
         run: bandit -r app -lll || true
+        working-directory: backend
 
       - name: Run tests
         run: pytest tests/ -q || true
+        working-directory: backend
 
   docker-build:
     runs-on: ubuntu-latest
@@ -40,6 +44,7 @@ jobs:
 
       - name: Build Docker images
         run: docker compose build
+        working-directory: backend
 
       - name: Scan API image (trivy)
         uses: aquasecurity/trivy-action@master

@@ -5,6 +5,7 @@ MongoDB connection layer for Enterprise Memory System.
 Production-safe, singleton async client. No side-effects at import time.
 """
 
+from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -13,7 +14,8 @@ from pymongo import ASCENDING
 from app.config.runtime import mongodb_db, mongodb_uri
 
 # Load .env once (safe to call on import)
-load_dotenv()
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(BACKEND_ROOT / ".env")
 
 
 class MongoDB:
@@ -86,7 +88,7 @@ class MongoDB:
 
         # Response cache (L2)
         await db.response_cache.create_index([("expires_at", ASCENDING)], expireAfterSeconds=0)
-        await db.response_cache.create_index([("_id", ASCENDING)], unique=True)
+        # _id index is created automatically by MongoDB
 
         # Agent version history
         await db.agent_versions.create_index([("agent_id", ASCENDING), ("version", ASCENDING)], unique=True)

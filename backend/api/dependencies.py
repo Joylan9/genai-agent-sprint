@@ -1,5 +1,7 @@
 # api/dependencies.py
 
+from pathlib import Path
+
 from app.registry.tool_registry import ToolRegistry
 from app.routing.intelligent_router import IntelligentRouter
 from app.services.planning_agent_service import PlanningAgentService
@@ -18,8 +20,9 @@ from app.infra.logger import StructuredLogger
 from app.config.runtime import web_search_available
 
 
-DATA_PATH = "data/sample.txt"
-STORE_PATH = "data/vector_store.pkl"
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+DATA_PATH = str(BACKEND_ROOT / "data" / "sample.txt")
+STORE_PATH = str(BACKEND_ROOT / "data" / "vector_store.pkl")
 
 
 def build_agent():
