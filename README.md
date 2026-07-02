@@ -1,81 +1,23 @@
-# TraceAI Enterprise Control Plane
-
-This section is the current source of truth for the production contract and supersedes older API-key-era guidance later in this file.
-
-## Current architecture
-- Backend source and backend runtime config live under `backend/`.
-- Canonical backend entrypoint: `app.api_app:app`
-- Compatibility shim: `api.app`
-- Primary execution UX: queued runs via `POST /api/runs/submit` plus SSE or polling
-- Compatibility/debug path: `POST /agent/run`
-- Auth model: JWT bearer tokens with optional explicit development bypass
-- Canonical run statuses: `queued | running | completed | failed`
-- Canonical Mongo env vars: `MONGODB_URI`, `MONGODB_DB`
-
-## Key APIs
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `POST /api/auth/refresh`
-- `GET /api/auth/me`
-- `GET /api/agents`
-- `POST /api/agents`
-- `GET /api/agents/{id}/versions`
-- `POST /api/agents/{id}/versions`
-- `POST /api/agents/{id}/versions/{version}/promote`
-- `POST /api/runs/submit`
-- `GET /api/runs`
-- `GET /api/runs/{id}/status`
-- `GET /traces/{id}`
-- `GET /api/runs/{id}/stream`
-- `GET /api/eval/suites`
-- `POST /api/eval/run-suite`
-- `GET /health`
-- `GET /ready`
-
-## Authentication
-- Protected routes expect `Authorization: Bearer <access_token>`.
-- Auth responses include `user.role` with `admin | developer | viewer`.
-- Development bypass is only available when `AUTH_DEV_BYPASS_ENABLED=true`.
-- OTP echo is only available when `DEV_EMAIL_OTP_ECHO_ENABLED=true`.
-
-## Local verification
-```bash
-cd backend
-python -m pytest
-cd ../frontend
-npx tsc --noEmit
-npm run build
-```
-
-## Known environment blockers in this workspace
-- Backend pytest collection still depends on installing missing Python packages in a proper venv.
-- `npm run build` and `npm test` require running outside this sandbox because `esbuild` spawn is blocked here.
-- Figma export remains blocked until the MCP session is re-authenticated to an editor-capable Figma seat.
-
----
-
 <div align="center">
 
-<!-- HERO BANNER -->
-<img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbzFtZnFxcHFtbGVqbGFtdWJ6ZnRtdWhhanZtYm1wdnVpNXF2dCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3oKIPEqDGUULpEU0aQ/giphy.gif" width="100%" alt="Neural Network Animation"/>
+<!-- ANIMATED HERO BANNER -->
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:0d1117,50:161b22,100:1f6feb&height=220&section=header&text=TraceAI&fontSize=80&fontColor=58a6ff&fontAlignY=35&desc=Enterprise%20AI%20Agent%20Control%20Plane&descSize=18&descColor=8b949e&descAlignY=55&animation=fadeIn" width="100%" alt="TraceAI Banner"/>
+
+<!-- TYPING SVG TAGLINE -->
+<a href="https://github.com/Joylan9/genai-agent-sprint">
+  <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=600&size=22&duration=3000&pause=1000&color=58A6FF&center=true&vCenter=true&multiline=true&repeat=true&width=700&height=70&lines=Orchestrate+%E2%80%A2+Observe+%E2%80%A2+Enforce+%E2%80%A2+Evaluate;Production-Grade+Agent+Operations+Platform" alt="Typing SVG" />
+</a>
 
 <br/>
 
-```
- ████████╗██████╗  █████╗  ██████╗███████╗     █████╗ ██╗
- ╚══██╔══╝██╔══██╗██╔══██╗██╔════╝██╔════╝    ██╔══██╗██║
-    ██║   ██████╔╝███████║██║     █████╗      ███████║██║
-    ██║   ██╔══██╗██╔══██║██║     ██╔══╝      ██╔══██║██║
-    ██║   ██║  ██║██║  ██║╚██████╗███████╗    ██║  ██║██║
-    ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚══════╝    ╚═╝  ╚═╝╚═╝
-```
+<!-- BADGE ROW — STATUS -->
+[![CI](https://img.shields.io/github/actions/workflow/status/Joylan9/genai-agent-sprint/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=Backend%20CI&color=238636)](https://github.com/Joylan9/genai-agent-sprint/actions/workflows/ci.yml)
+[![Frontend CD](https://img.shields.io/github/actions/workflow/status/Joylan9/genai-agent-sprint/frontend-cd.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=Frontend%20CD&color=238636)](https://github.com/Joylan9/genai-agent-sprint/actions/workflows/frontend-cd.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
+[![Last Commit](https://img.shields.io/github/last-commit/Joylan9/genai-agent-sprint?style=for-the-badge&color=1f6feb)](https://github.com/Joylan9/genai-agent-sprint/commits/main)
+[![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen?style=for-the-badge&logo=github)](https://github.com/Joylan9/genai-agent-sprint/pulls)
 
-### The AI Control Plane for Production-Grade Agent Operations
-
-*Orchestrate, observe, enforce, and evaluate autonomous AI agents — with the reliability your infrastructure demands.*
-
-<br/>
-
+<!-- BADGE ROW — TECH STACK -->
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![React](https://img.shields.io/badge/React_19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
@@ -85,196 +27,155 @@ npm run build
 [![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://docker.com)
 [![Celery](https://img.shields.io/badge/Celery-37814A?style=for-the-badge&logo=celery&logoColor=white)](https://docs.celeryq.dev)
 [![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?style=for-the-badge&logo=prometheus&logoColor=white)](https://prometheus.io)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 
 <br/>
 
-[🚀 Launch in 60 Seconds](#-launch-in-60-seconds) · [🏗️ Architecture](#%EF%B8%8F-architecture) · [✨ Capabilities](#-capabilities) · [📊 Data Flow](#-end-to-end-data-flow) · [🐛 Report Bug](../../issues)
+**A full-stack AI agent operations platform that gives you complete visibility into every planning step, tool call, and synthesis decision your agents make — with the reliability your infrastructure demands.**
+
+<br/>
+
+[🚀 Quick Start](#-getting-started) · [🏗️ Architecture](#%EF%B8%8F-architecture) · [✨ Features](#-features) · [📡 API Reference](#-api-reference) · [🐛 Report Bug](https://github.com/Joylan9/genai-agent-sprint/issues)
 
 </div>
 
-<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%">
+<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%" alt="divider"/>
 
-## 🔭 Overview
+## 📸 Visual Demo
 
-**TraceAI** is a full-stack AI agent operations platform that provides **complete visibility into every planning step, tool call, and synthesis decision** your agents make. It doesn't just run agents — it gives you the runtime, evaluation lab, operations console, and debugging interface in a single cohesive system.
+<div align="center">
 
-When something breaks, you don't see *"Error: something went wrong."* You see **what** failed, **why** it failed, **how to fix it**, and a **one-click retry** with the original goal pre-filled.
+> **[ADD GIF: Record a full user flow — login → dashboard → create agent → execute a run in the Playground → view the RunDetails page with execution timeline animation. Recommend: 1920×1080, 30fps, < 15MB, save as `assets/demo-full-flow.gif`]**
 
-Built for **AI infrastructure engineers**, **GenAI platform teams**, and anyone operating agent systems that need to work beyond a demo.
+</div>
 
-<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%">
-
-## ✨ Capabilities
-
-<table align="center">
-<tr>
-<td width="50%" valign="top">
-
-### ⚡ Plan → Execute → Synthesize
-LLM-powered planner decomposes goals into subtasks, routes to tools with intelligent fallback, and synthesizes final answers — with every step traced and stored.
-
-### 🔬 Execution Timeline
-Animated proportional bars showing planner → tool → synthesis timing with hover tooltips, status indicators, and step-by-step trace drill-down.
-
-### 🛡️ Smart Error Diagnostics
-**What / Why / Fix / Retry** panels with pattern-based error categorization. Timeouts, auth failures, LLM errors — each gets specific, actionable guidance.
-
-### 📊 Evaluation Lab
-Benchmark agents against test suites with **3-score weighted evaluation**: keyword coverage (30%), tool accuracy (30%), and LLM-as-judge scoring (40%).
-
-</td>
-<td width="50%" valign="top">
-
-### 🔐 5-Gate Security Guardrails
-Prompt injection detection, plan validation, tool output sanitization, memory poisoning prevention, and sensitive data leakage scanning — all hard-blocks, not warnings.
-
-### ⌨️ Command Palette & Power Shortcuts
-**Ctrl+K** fuzzy search across pages, agents, runs, and actions. Global keyboard shortcuts (**R** run, **A** agents, **E** evals) for power-user workflows.
-
-### 🔄 Circuit Breaker Pattern
-Every external call (Ollama, web search, MongoDB) wrapped in an async circuit breaker with CLOSED → OPEN → HALF_OPEN state transitions to prevent cascade failures.
-
-### 🐳 Production-Ready Infrastructure
-One-command deployment via Docker Compose with health checks, readiness probes, Celery background tasks, L1+L2 response caching, and Prometheus observability.
-
-</td>
-</tr>
-</table>
-
-<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%">
-
-## 📊 Stats at a Glance
-
-<table align="center">
-<tr>
-<th>Metric</th>
-<th>Value</th>
-</tr>
-<tr><td>🐍 <b>Backend Python Files</b></td><td>45+ across 16 sub-packages</td></tr>
-<tr><td>⚛️ <b>Frontend TypeScript Files</b></td><td>60+ React components & modules</td></tr>
-<tr><td>📐 <b>Backend Lines of Code</b></td><td>5,000+</td></tr>
-<tr><td>🎨 <b>Frontend Lines of Code</b></td><td>15,000+</td></tr>
-<tr><td>🧪 <b>Test Files</b></td><td>10 pytest suites + frontend a11y tests</td></tr>
-<tr><td>🐳 <b>Docker Services</b></td><td>4 (API, Worker, MongoDB, Redis)</td></tr>
-<tr><td>📦 <b>Python Dependencies</b></td><td>44 pinned packages</td></tr>
-<tr><td>🔄 <b>CI/CD Pipelines</b></td><td>2 GitHub Actions (Trivy + CodeQL + GHCR)</td></tr>
-<tr><td>🛡️ <b>Security Gates</b></td><td>5 hard-block guardrail layers</td></tr>
-<tr><td>📡 <b>API Endpoints</b></td><td>7 routers, 20+ routes</td></tr>
-</table>
-
-<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%">
-
-## 🏗️ Architecture
-
-<p align="center">
-  <img src="https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=1200" width="800" alt="AI Architecture"/>
-</p>
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                        🖥️  FRONTEND  (React 19 + TypeScript + Vite 7)      │
-│                                                                             │
-│   Dashboard ─── Playground ─── Runs ─── Eval Lab ─── Agent Detail          │
-│   CommandPalette (⌘K) ─── Sidebar ─── TopNav ─── ActivityDrawer            │
-│   AuthContext ─── ErrorBoundary ─── SystemStatus ─── RunTimeline           │
-└─────────────────────────────┬───────────────────────────────────────────────┘
-                              │  HTTP / SSE
-┌─────────────────────────────▼───────────────────────────────────────────────┐
-│                        ⚡  API LAYER  (FastAPI + Gunicorn + Uvicorn)        │
-│                                                                             │
-│   ┌──────────┐  ┌───────────┐  ┌───────────┐  ┌────────┐  ┌────────────┐  │
-│   │ Auth API │  │ Platform  │  │ Agent API │  │ Stream │  │ Eval API   │  │
-│   │ (JWT)    │  │ (CRUD)    │  │ (Execute) │  │ (SSE)  │  │ (Suites)   │  │
-│   └──────────┘  └───────────┘  └───────────┘  └────────┘  └────────────┘  │
-│                                                                             │
-│   Prometheus Middleware ─── CORS ─── API Key Guard ─── Readiness Probe     │
-└─────────────────────────────┬───────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────▼───────────────────────────────────────────────┐
-│                        🧠  AGENT RUNTIME                                    │
-│                                                                             │
-│   ┌────────────────────────────────────────────────────────────────────┐    │
-│   │  PlanningAgentService  (576 lines)                                 │    │
-│   │  ┌──────────────┐  ┌──────────────┐  ┌────────────────────────┐   │    │
-│   │  │ create_plan() │→│ execute_plan()│→│ synthesize_answer()     │   │    │
-│   │  │  LLM → JSON  │  │ step-by-step │  │ observations → answer  │   │    │
-│   │  └──────────────┘  └──────┬───────┘  └────────────────────────┘   │    │
-│   └───────────────────────────┼────────────────────────────────────────┘    │
-│                               │                                             │
-│   ┌───────────────────────────▼────────────────────────────────────────┐    │
-│   │  IntelligentRouter                                                 │    │
-│   │  ├─ Primary Execution via ReliableExecutor                         │    │
-│   │  ├─ Failure Fallback  → web_search                                 │    │
-│   │  └─ Confidence Fallback (RAG similarity < 0.50) → web_search      │    │
-│   └───────────────────────────┬────────────────────────────────────────┘    │
-│                               │                                             │
-│   ┌───────────┐  ┌───────────▼───┐  ┌─────────────┐  ┌────────────────┐   │
-│   │ Guardrails│  │ ToolRegistry  │  │ PolicyEngine│  │ ResponseCache  │   │
-│   │ (5 gates) │  │ RAG/Web/Calc  │  │ enforcement │  │ L1 mem + L2 DB │   │
-│   └───────────┘  └───────────────┘  └─────────────┘  └────────────────┘   │
-└─────────────────────────────┬───────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────▼───────────────────────────────────────────────┐
-│                        🏗️  INFRASTRUCTURE                                   │
-│                                                                             │
-│   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
-│   │   Ollama     │  │  MongoDB 7   │  │   Redis 7    │  │   Celery     │  │
-│   │  Local LLM   │  │ Traces/Users │  │ Broker/Cache │  │  Background  │  │
-│   │  llama3 8B   │  │  6 indexed   │  │  acks_late   │  │  agent tasks │  │
-│   │              │  │  collections │  │              │  │  5min limit  │  │
-│   │  ┌────────┐  │  └──────────────┘  └──────────────┘  └──────────────┘  │
-│   │  │Circuit │  │                                                         │
-│   │  │Breaker │  │  ┌──────────────────────────────────────────────────┐   │
-│   │  │(async) │  │  │  Prometheus  ─── request count/latency           │   │
-│   │  └────────┘  │  │                  LLM call count/latency/failures │   │
-│   └──────────────┘  └──────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+<details>
+<summary><b>🖼️ More Screenshots</b></summary>
 
 <br/>
 
-<details>
-<summary><h3>🧠 Agent Runtime — Deep Dive</h3></summary>
+<div align="center">
 
-The core engine is `PlanningAgentService` (576 lines), implementing a **Plan → Execute → Synthesize** pipeline:
+<table>
+<tr>
+<td width="50%" valign="top">
 
-| Stage | Method | What Happens |
-|-------|--------|-------------|
-| **Plan** | `create_plan()` | Sends goal to LLM with structured prompt. Requests JSON plan with `tool` + `query` per step. Retries JSON parsing up to `max_json_retries` times |
-| **Parse** | `parse_plan_json()` | Robust JSON extraction — handles markdown fences, partial JSON, nested structures |
-| **Execute** | `execute_plan()` | Iterates plan steps, routes each to `IntelligentRouter`, collects observations, applies guardrail validation on every output, stores traces in MongoDB |
-| **Synthesize** | `synthesize_answer()` | Combines all observations + memory context, generates final coherent answer via LLM |
+> **[ADD IMAGE: Dashboard page showing stat cards, system health, recent runs. Desktop view, 1920×1080, save as `assets/screenshot-dashboard.png`]**
 
-**IntelligentRouter** adds two fallback strategies:
-1. **Failure-based**: Primary tool errors → automatic fallback to `web_search`
-2. **Confidence-based**: RAG returns similarity < 0.50 → transparent fallback to `web_search`
+</td>
+<td width="50%" valign="top">
 
-All routing decisions produce structured logs with `request_id`, tool names, and fallback reasons.
+> **[ADD IMAGE: Playground page with a goal input and real-time SSE streaming result. Desktop view, 1920×1080, save as `assets/screenshot-playground.png`]**
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+> **[ADD IMAGE: RunDetails page showing the animated execution timeline with step-by-step trace. 1920×1080, save as `assets/screenshot-run-timeline.png`]**
+
+</td>
+<td width="50%" valign="top">
+
+> **[ADD IMAGE: Eval Lab page showing test suite results with pass/fail scores. 1920×1080, save as `assets/screenshot-eval-lab.png`]**
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+> **[ADD IMAGE: ErrorPanel showing What/Why/Fix/Retry diagnostics for a failed run. 1920×1080, save as `assets/screenshot-error-panel.png`]**
+
+</td>
+<td width="50%" valign="top">
+
+> **[ADD IMAGE: Login page with animated background. 1920×1080, save as `assets/screenshot-login.png`]**
+
+</td>
+</tr>
+</table>
+
+</div>
+
+<div align="center">
+
+> **[ADD IMAGE: Mobile responsive view of Dashboard — capture from browser DevTools at 375×812 (iPhone viewport). Save as `assets/screenshot-mobile-dashboard.png`]**
+
+</div>
 
 </details>
 
-<details>
-<summary><h3>🔐 Security — 5-Gate Guardrails</h3></summary>
+<p align="right"><a href="#top">⬆ Back to top</a></p>
 
-Every request passes through **five independent security gates** — all hard-blocks that raise `ValueError` immediately:
+<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%" alt="divider"/>
 
-| Gate | Method | Patterns Detected |
-|------|--------|------------------|
-| **Input Validation** | `validate_user_input()` | 13 prompt injection patterns: *"ignore previous instructions"*, *"reveal system prompt"*, *"dump memory"*, *"bypass security"* + 16KB input length limit |
-| **Plan Validation** | `validate_plan()` | Max 12 steps, tool whitelist enforcement, step shape validation (requires `tool` + `query` per step) |
-| **Output Sanitization** | `sanitize_tool_output()` | 8 malicious output patterns: *"system override"*, *"exfiltrate"*, *"steal"*, *"run this code"* + sensitive data scanning |
-| **Memory Protection** | `validate_memory_write()` | 7 memory poisoning indicators: *"from now on"*, *"always answer"*, *"store this permanently"*, *"do not forget"* |
-| **Answer Leakage** | `validate_final_answer()` | Scans for API keys, passwords, secrets, private keys, AWS credentials, authorization headers |
+## 📋 Table of Contents
 
-The **PolicyEngine** provides an additional enforcement layer on top of guardrails.
+<details open>
+<summary><b>Click to expand</b></summary>
+
+- [📸 Visual Demo](#-visual-demo)
+- [✨ Features](#-features)
+- [🏗️ Architecture](#%EF%B8%8F-architecture)
+- [🛠️ Tech Stack](#%EF%B8%8F-tech-stack)
+- [🚀 Getting Started](#-getting-started)
+- [📂 Project Structure](#-project-structure)
+- [📡 API Reference](#-api-reference)
+- [🔐 Authentication](#-authentication)
+- [🧪 Testing](#-testing)
+- [🚢 CI/CD](#-cicd)
+- [📊 End-to-End Data Flow](#-end-to-end-data-flow)
+- [🗺️ Roadmap](#%EF%B8%8F-roadmap)
+- [🤝 Contributing](#-contributing)
+- [📄 License](#-license)
+- [👤 Author](#-author)
 
 </details>
 
-<details>
-<summary><h3>🔄 Reliability — Circuit Breaker & Resilience</h3></summary>
+<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%" alt="divider"/>
 
-Every external service call is wrapped in an **async circuit breaker**:
+## ✨ Features
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### ⚡ Agent Runtime
+- 🧠 **Plan → Execute → Synthesize** pipeline — LLM decomposes goals into subtasks, routes to tools, and synthesizes answers
+- 🔄 **Intelligent Routing** with failure-based and confidence-based fallback to web search
+- 📦 **L1 + L2 Response Cache** — in-memory + MongoDB for sub-millisecond cache hits
+- 💾 **3-Tier Memory** — short-term (session), long-term (MongoDB), coordinated via MemoryManager
+
+### 🔬 Observability & Debugging
+- 📊 **Execution Timeline** — animated proportional bars for planner → tool → synthesis timing
+- 🛡️ **Smart Error Diagnostics** — What / Why / Fix / Retry panels with pattern-based categorization
+- 📈 **Prometheus Metrics** — request count, latency, LLM call stats, failure counters
+- ❤️ **Health & Readiness** probes with dependency checks
+
+</td>
+<td width="50%" valign="top">
+
+### 🔐 Security & Guardrails
+- 🚫 **5-Gate Security** — prompt injection, plan validation, output sanitization, memory poisoning, data leakage scanning
+- 🏛️ **Policy Engine** — additional enforcement layer on top of guardrails
+- 🔑 **JWT Auth** — hand-rolled HMAC-SHA256, zero external dependencies
+- 👥 **RBAC** — admin / developer / viewer roles
+
+### 🖥️ Production UX
+- ⌨️ **Command Palette** (`Ctrl+K`) — fuzzy search across pages, agents, runs
+- ⚙️ **8 Purpose-Built Pages** — Dashboard, Playground, Runs, RunDetails, Agents, Eval Lab, Login, System Status
+- 📊 **Evaluation Lab** — 3-score weighted benchmarking (keyword 30%, tool accuracy 30%, LLM-as-judge 40%)
+- 🐳 **One-Command Deploy** via Docker Compose with health checks & Celery workers
+
+</td>
+</tr>
+</table>
+
+<details>
+<summary><b>🔄 Reliability Deep Dive — Circuit Breaker & Resilience</b></summary>
+
+<br/>
+
+Every external service call (Ollama, web search, MongoDB) is wrapped in an **async circuit breaker**:
 
 ```
 CLOSED (normal)  ──[N consecutive failures]──►  OPEN (rejecting all calls)
@@ -296,18 +197,14 @@ CLOSED (normal)  ──[N consecutive failures]──►  OPEN (rejecting all ca
 | `recovery_timeout` | 30s | 30s |
 | `execution_timeout` | 150s | 15s |
 
-**Additional resilience mechanisms:**
-- **Concurrency semaphore** — max 2 parallel LLM calls per worker
-- **RetryPolicy** — configurable retry with backoff
-- **TimeoutExecutor** — hard timeout enforcement per operation
-- **ReliableExecutor** — wraps tools with retry + timeout + error handling
+**Additional resilience:** Concurrency semaphore (max 2 parallel LLM calls), RetryPolicy with backoff, TimeoutExecutor, and ReliableExecutor wrapping all tools.
 
 </details>
 
 <details>
-<summary><h3>📦 Caching — L1 + L2 Response Cache</h3></summary>
+<summary><b>📦 Caching Deep Dive — L1 + L2 Response Cache</b></summary>
 
-Smart caching with two tiers to minimize redundant LLM calls:
+<br/>
 
 | Layer | Storage | TTL | Speed |
 |-------|---------|-----|-------|
@@ -321,7 +218,28 @@ Keys are SHA-256 hashes of normalized goal text and goal+plan combinations.
 </details>
 
 <details>
-<summary><h3>⏳ Background Tasks — Celery Architecture</h3></summary>
+<summary><b>🔐 Security Deep Dive — 5-Gate Guardrails</b></summary>
+
+<br/>
+
+Every request passes through **five independent security gates** — all hard-blocks that raise `ValueError` immediately:
+
+| Gate | Method | Patterns Detected |
+|------|--------|------------------|
+| **Input Validation** | `validate_user_input()` | 13 prompt injection patterns + 16KB input length limit |
+| **Plan Validation** | `validate_plan()` | Max 12 steps, tool whitelist, step shape validation |
+| **Output Sanitization** | `sanitize_tool_output()` | 8 malicious output patterns + sensitive data scanning |
+| **Memory Protection** | `validate_memory_write()` | 7 memory poisoning indicators |
+| **Answer Leakage** | `validate_final_answer()` | API keys, passwords, secrets, private keys, AWS credentials |
+
+The **PolicyEngine** provides an additional enforcement layer on top of guardrails.
+
+</details>
+
+<details>
+<summary><b>⏳ Background Tasks — Celery Architecture</b></summary>
+
+<br/>
 
 Long-running agent executions are decoupled from the API via **Celery**:
 
@@ -347,57 +265,88 @@ Celery Worker picks up:
 
 </details>
 
-<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%">
+<p align="right"><a href="#top">⬆ Back to top</a></p>
 
-## ⚙️ Backend Deep Dive
+<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%" alt="divider"/>
 
-<p align="center">
-  <img src="https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200" width="800" alt="Enterprise Infrastructure"/>
-</p>
+## 🏗️ Architecture
+
+```mermaid
+graph TB
+    subgraph Frontend["🖥️ Frontend — React 19 + TypeScript + Vite 7"]
+        UI[Dashboard / Playground / Runs / Eval Lab]
+        CMD[Command Palette ⌘K]
+        AUTH_UI[AuthContext + RequireRole]
+        ERR_UI[ErrorBoundary + ErrorPanel]
+    end
+
+    subgraph API["⚡ API Layer — FastAPI + Gunicorn + Uvicorn"]
+        AUTH_API[Auth Router — JWT]
+        PLATFORM[Platform Router — CRUD]
+        AGENT_API[Agent Router — Execute]
+        STREAM[Stream Router — SSE]
+        EVAL_API[Eval Router — Suites]
+        MW[Prometheus Middleware + CORS + API Guard]
+    end
+
+    subgraph Runtime["🧠 Agent Runtime"]
+        PLANNER[PlanningAgentService]
+        ROUTER[IntelligentRouter]
+        GUARD[Guardrails — 5 Gates]
+        POLICY[PolicyEngine]
+        CACHE[ResponseCache — L1 + L2]
+        TOOLS[ToolRegistry — RAG / Web / Calc]
+    end
+
+    subgraph Infra["🏗️ Infrastructure"]
+        OLLAMA[Ollama — llama3 8B<br/>+ Circuit Breaker]
+        MONGO[(MongoDB 7<br/>6 Collections)]
+        REDIS[(Redis 7<br/>Broker + Cache)]
+        CELERY[Celery Worker<br/>Background Tasks]
+        PROM[Prometheus<br/>Metrics]
+    end
+
+    Frontend -->|HTTP / SSE| API
+    API --> Runtime
+    Runtime --> Infra
+    PLANNER --> ROUTER
+    ROUTER --> TOOLS
+    ROUTER --> GUARD
+    CELERY --> PLANNER
+    API --> CELERY
+    STREAM -->|SSE Events| Frontend
+```
 
 <details>
-<summary><h3>📡 API Layer — 7 Routers, 20+ Endpoints</h3></summary>
+<summary><b>🧠 Agent Runtime — Deep Dive</b></summary>
 
-| Router | File | Routes | Responsibility |
-|--------|------|--------|---------------|
-| **Auth** | `backend/app/api/auth.py` (609 lines) | `/api/auth/*` | Register, login, refresh, profile, OTP forgot-password. Hand-rolled JWT (HMAC-SHA256), SHA-256 password hashing |
-| **Platform** | `backend/app/api/platform.py` (330 lines) | `/api/agents/*`, `/api/runs/*` | Agent CRUD, run history with search/filter, Celery-backed async run submission, feature flags |
-| **Agent** | `backend/app/api/agent.py` | `/agent/run` | Synchronous agent execution |
-| **Stream** | `backend/app/api/stream.py` | `/api/runs/{id}/stream` | Server-Sent Events for real-time run progress |
-| **Eval** | `backend/app/api/eval.py` | `/api/eval/*` | Evaluation suite execution and results |
-| **Health** | `backend/app/observability/health.py` | `GET /health` | Basic health status |
-| **Readiness** | `backend/app/observability/readiness.py` | `GET /ready` | Dependency health checks |
+<br/>
 
-**Auth system highlights:**
-- 8 Pydantic request/response models
-- JWT via raw `hmac` / `hashlib` — zero external JWT dependencies
-- `get_current_user` / `get_optional_user` FastAPI dependency injection
-- OTP flow: 6-digit code → SMTP delivery → auto-fill in dev mode when SMTP unconfigured
-- Full forgot-password: request OTP → verify → reset token → new password
+The core engine is `PlanningAgentService`, implementing a **Plan → Execute → Synthesize** pipeline:
+
+| Stage | Method | What Happens |
+|-------|--------|-------------|
+| **Plan** | `create_plan()` | Sends goal to LLM. Requests JSON plan with `tool` + `query` per step. Retries JSON parsing up to `max_json_retries` times |
+| **Parse** | `parse_plan_json()` | Robust JSON extraction — handles markdown fences, partial JSON, nested structures |
+| **Execute** | `execute_plan()` | Iterates steps, routes each to `IntelligentRouter`, collects observations, applies guardrail validation, stores traces |
+| **Synthesize** | `synthesize_answer()` | Combines observations + memory context → final coherent answer via LLM |
+
+**IntelligentRouter** fallback strategies:
+1. **Failure-based** — Primary tool errors → automatic fallback to `web_search`
+2. **Confidence-based** — RAG similarity < 0.50 → transparent fallback to `web_search`
 
 </details>
 
 <details>
-<summary><h3>🧠 Tools & Routing</h3></summary>
+<summary><b>💾 Memory System — 3-Tier Architecture</b></summary>
 
-**Three registered tools**, self-registering into `ToolRegistry` at import time:
+<br/>
 
-| Tool | File | Mechanism |
-|------|------|-----------|
-| `rag_search` | `app/tools/rag_search_tool.py` | Vector similarity via **sentence-transformers** + scikit-learn. Returns similarity scores for confidence-based routing |
-| `web_search` | `app/tools/web_search_tool.py` | **SerpAPI** web search. Acts as the universal fallback |
-| `calculator` | `app/tools/tools.py` | Arithmetic evaluation |
-
-</details>
-
-<details>
-<summary><h3>💾 Memory System — 3-Tier Architecture</h3></summary>
-
-| Tier | File | Storage | Purpose |
-|------|------|---------|---------|
-| **Short-term** | `short_term_memory.py` | In-process buffer | Session context within a single run |
-| **Long-term** | `long_term_memory.py` | MongoDB | Persistent cross-session memory |
-| **Manager** | `memory_manager.py` | Orchestrator | Coordinates short + long term per session |
+| Tier | Storage | Purpose |
+|------|---------|---------|
+| **Short-term** | In-process buffer | Session context within a single run |
+| **Long-term** | MongoDB | Persistent cross-session memory |
+| **Manager** | Orchestrator | Coordinates short + long term per session |
 
 **MongoDB Collections & Indexes:**
 
@@ -412,191 +361,86 @@ Celery Worker picks up:
 
 </details>
 
-<details>
-<summary><h3>📊 Evaluation Engine</h3></summary>
+<p align="right"><a href="#top">⬆ Back to top</a></p>
 
-`EvalRunner` (209 lines) runs test suites with **3-score weighted evaluation**:
+<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%" alt="divider"/>
 
-| Scoring Method | Weight | Logic |
-|---------------|--------|-------|
-| **Keyword Coverage** | 30% | Fraction of expected keywords found in answer |
-| **Tool Accuracy** | 30% | Expected tools used vs. actual tools observed |
-| **LLM-as-Judge** | 40% | Same LLM scores relevance (40%), accuracy (30%), completeness (30%) |
+## 🛠️ Tech Stack
 
-Pass threshold: overall score ≥ 50. Results stored in MongoDB `eval_results`. Test cases defined in `backend/eval/test_cases.json` — 5 cases covering knowledge retrieval and current events.
+<div align="center">
 
-</details>
+### Backend
 
-<details>
-<summary><h3>📈 Observability Stack</h3></summary>
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.128-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Ollama](https://img.shields.io/badge/Ollama-LLM_Runtime-000000?style=for-the-badge&logo=ollama&logoColor=white)](https://ollama.com)
+[![Celery](https://img.shields.io/badge/Celery-5.6-37814A?style=for-the-badge&logo=celery&logoColor=white)](https://docs.celeryq.dev)
+[![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?style=for-the-badge&logo=prometheus&logoColor=white)](https://prometheus.io)
+[![Gunicorn](https://img.shields.io/badge/Gunicorn-499848?style=for-the-badge&logo=gunicorn&logoColor=white)](https://gunicorn.org)
 
-| Endpoint | Metrics Exposed |
-|----------|----------------|
-| `GET /health` | Basic health status |
-| `GET /ready` | MongoDB, Ollama dependency checks |
-| `GET /metrics` | Prometheus — `request_count`, `request_latency`, `llm_call_count`, `llm_call_latency`, `llm_failure_count` |
+### Frontend
 
-Every HTTP request is instrumented via Prometheus middleware. Every LLM call emits latency histograms, success/failure counters, and structured log entries.
+[![React](https://img.shields.io/badge/React-19.2-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://typescriptlang.org)
+[![Vite](https://img.shields.io/badge/Vite-7.3-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vite.dev)
+[![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![TanStack Query](https://img.shields.io/badge/TanStack_Query-5-FF4154?style=for-the-badge&logo=reactquery&logoColor=white)](https://tanstack.com/query)
+[![React Router](https://img.shields.io/badge/React_Router-7-CA4245?style=for-the-badge&logo=reactrouter&logoColor=white)](https://reactrouter.com)
 
-</details>
+### Database & Infrastructure
 
-<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%">
+[![MongoDB](https://img.shields.io/badge/MongoDB-7-47A248?style=for-the-badge&logo=mongodb&logoColor=white)](https://mongodb.com)
+[![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://docker.com)
+[![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI%2FCD-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/features/actions)
+[![Trivy](https://img.shields.io/badge/Trivy-Security_Scan-1904DA?style=for-the-badge&logo=aquasecurity&logoColor=white)](https://trivy.dev)
+[![CodeQL](https://img.shields.io/badge/CodeQL-SAST-000000?style=for-the-badge&logo=github&logoColor=white)](https://codeql.github.com)
 
-## 🖥️ Frontend Deep Dive
+</div>
 
-<p align="center">
-  <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=1200" width="800" alt="Dashboard Analytics"/>
-</p>
+<p align="right"><a href="#top">⬆ Back to top</a></p>
 
-### 🛠️ Tech Stack
+<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%" alt="divider"/>
 
-<table align="center">
-<tr><th>Technology</th><th>Version</th><th>Role</th></tr>
-<tr><td><b>React</b></td><td>19</td><td>UI framework with concurrent features</td></tr>
-<tr><td><b>TypeScript</b></td><td>Strict mode</td><td>Type-safe components</td></tr>
-<tr><td><b>Vite</b></td><td>7</td><td>Sub-second HMR, native ESM bundler</td></tr>
-<tr><td><b>TanStack Query</b></td><td>Latest</td><td>Server state — polling, caching, revalidation</td></tr>
-<tr><td><b>Tailwind CSS</b></td><td>v4</td><td>Utility-first styling with dark mode</td></tr>
-<tr><td><b>React Router</b></td><td>Latest</td><td>SPA routing</td></tr>
-</table>
+## 🚀 Getting Started
 
-### 🗺️ Routing Map
+> **Prerequisites:** Docker & Docker Compose · Ollama · Node.js 18+ · Python 3.11+
 
-<table align="center">
-<tr><th>Route</th><th>Page</th><th>Auth</th></tr>
-<tr><td><code>/login</code></td><td>LoginPage</td><td>❌</td></tr>
-<tr><td><code>/forgot-password</code></td><td>ForgotPasswordPage</td><td>❌</td></tr>
-<tr><td><code>/</code></td><td>Dashboard</td><td>✅</td></tr>
-<tr><td><code>/agents</code></td><td>AgentListPage</td><td>✅</td></tr>
-<tr><td><code>/agents/:id</code></td><td>AgentDetailPage</td><td>✅</td></tr>
-<tr><td><code>/runs</code></td><td>RunsListPage</td><td>✅</td></tr>
-<tr><td><code>/runs/:id</code></td><td>RunDetailsPage</td><td>✅</td></tr>
-<tr><td><code>/execute</code></td><td>PlaygroundPage</td><td>✅</td></tr>
-<tr><td><code>/eval</code></td><td>EvalPage</td><td>✅</td></tr>
-<tr><td><code>/status</code></td><td>SystemStatusPage</td><td>✅</td></tr>
-</table>
+### Option A — Manual Setup
 
-### 📱 Pages (8 pages, ~121KB)
+**1. Clone the repository**
 
-<table align="center">
-<tr><th>Page</th><th>Capabilities</th></tr>
-<tr><td><b>Dashboard</b></td><td>Real-time stat cards, system health monitor, recent runs, agent count, quick actions</td></tr>
-<tr><td><b>Playground</b></td><td>Goal input, agent execution trigger, real-time SSE streaming, result display</td></tr>
-<tr><td><b>RunDetails</b></td><td>Execution Timeline visualization, step-by-step trace, ErrorPanel for failed runs with What/Why/Fix/Retry</td></tr>
-<tr><td><b>EvalPage</b></td><td>Test suite runner, pass/fail scoring, historical comparison, per-case drill-down</td></tr>
-<tr><td><b>LoginPage</b></td><td>Premium login with animated background, form validation, registration</td></tr>
-<tr><td><b>ForgotPasswordPage</b></td><td>Multi-step OTP flow: email → verify code → set new password</td></tr>
-<tr><td><b>AgentDetailPage</b></td><td>Agent config viewer, run history, version management</td></tr>
-<tr><td><b>Runs</b></td><td>Run list with search, status filtering (all/pending/running/completed/failed), delete</td></tr>
-</table>
-
-### 🧩 Shared UI Component Library (14 components)
-
-<table align="center">
-<tr><th>Component</th><th>Purpose</th></tr>
-<tr><td><b>RunTimeline</b></td><td>Animated proportional timing bars — planner → tool → synthesis</td></tr>
-<tr><td><b>ErrorPanel</b></td><td>What/Why/Fix/Retry error diagnostics with pattern-based categorization</td></tr>
-<tr><td><b>CommandPalette</b></td><td>Ctrl+K fuzzy search with keyboard navigation across entire platform</td></tr>
-<tr><td><b>EmptyState</b></td><td>Illustrated empty data states</td></tr>
-<tr><td><b>StatusBanner</b></td><td>System status notification banners</td></tr>
-<tr><td><b>Button / Input / Modal / Badge</b></td><td>Reusable primitives with consistent styling</td></tr>
-<tr><td><b>Table / TableSkeleton</b></td><td>Data tables with animated loading states</td></tr>
-<tr><td><b>PageLoader / InlineSpinner / Skeleton</b></td><td>Loading state components</td></tr>
-</table>
-
-### 🛡️ Cross-Cutting Concerns
-
-<table align="center">
-<tr><th>Module</th><th>Contents</th></tr>
-<tr><td><code>app/auth/</code></td><td>AuthContext (JWT + user state), RequireRole (role guard), usePermission hook</td></tr>
-<tr><td><code>app/errors/</code></td><td>ErrorBoundary, GlobalErrorBoundary, QueryErrorFallback</td></tr>
-<tr><td><code>app/monitoring/</code></td><td>SystemStatus widget, SystemStatusPage, useHealthMonitor hook</td></tr>
-<tr><td><code>app/providers/</code></td><td>App-wide providers (QueryClient, Router)</td></tr>
-<tr><td><code>app/telemetry/</code></td><td>Client-side performance tracking</td></tr>
-<tr><td><code>features/agent/</code></td><td>Agent API client, hooks, types, components</td></tr>
-</table>
-
-<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%">
-
-## 🧪 Test Coverage
-
-<table align="center">
-<tr><th>Test File</th><th>Coverage Area</th></tr>
-<tr><td><code>test_agent_run.py</code></td><td>Full agent execution pipeline — plan creation, execution, synthesis</td></tr>
-<tr><td><code>test_guardrails.py</code></td><td>All 5 guardrail methods — injection, plan, output, memory, leakage</td></tr>
-<tr><td><code>test_router.py</code></td><td>Intelligent router — tool resolution, failure fallback, confidence fallback</td></tr>
-<tr><td><code>test_circuit_breaker.py</code></td><td>State transitions: CLOSED → OPEN → HALF_OPEN → CLOSED</td></tr>
-<tr><td><code>test_policy_engine.py</code></td><td>Policy engine enforcement rules</td></tr>
-<tr><td><code>test_retriever.py</code></td><td>RAG retriever service</td></tr>
-<tr><td><code>test_health.py</code></td><td>Health and readiness endpoint responses</td></tr>
-<tr><td><code>test_metrics.py</code></td><td>Prometheus metrics emission</td></tr>
-<tr><td><code>e2e_smoke_test.py</code></td><td>End-to-end pipeline: API → planner → tools → synthesis</td></tr>
-<tr><td><code>conftest.py</code></td><td>Shared fixtures — mocked Ollama, MongoDB, agent instances</td></tr>
-</table>
-
-Frontend testing: **Vitest** + **React Testing Library** with accessibility tests (`a11y.test.tsx`).
-
-<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%">
-
-## 🚀 CI/CD Pipelines
-
-### Backend CI (`ci.yml`)
-
-```
-lint-test ────────────────► docker-build
-  │                            │
-  ├─ Python 3.11 setup         ├─ docker compose build
-  ├─ flake8 lint                └─ Trivy container scan
-  ├─ bandit security scan          (HIGH/CRITICAL severity)
-  └─ pytest suite
+```bash
+git clone https://github.com/Joylan9/genai-agent-sprint.git
+cd genai-agent-sprint
 ```
 
-### Frontend CD (`frontend-cd.yml`)
-
-```
-build-and-package
-  │
-  ├─ CodeQL SAST (JavaScript/TypeScript)
-  ├─ npm ci → TypeScript check → ESLint → Vitest → Vite build
-  ├─ npm audit (moderate+ blocking)
-  ├─ Upload build artifact
-  ├─ CodeQL analysis
-  └─ Docker build → push to GitHub Container Registry (GHCR)
-```
-
-<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%">
-
-## 🚀 Launch in 60 Seconds
-
-> ℹ️ **Prerequisites:** Docker & Docker Compose, Ollama, Node.js 18+, Python 3.11+
-
-<table align="center"><tr><td>
-
-**1 — Infrastructure**
+**2. Start infrastructure**
 
 ```bash
 cd backend
 docker compose up -d mongo redis
 ```
 
-**2 — LLM Engine**
+**3. Start the LLM engine**
 
 ```bash
 ollama serve
 ollama pull llama3:8b-instruct-q4_K_M
 ```
 
-**3 — Backend**
+**4. Start the backend**
 
 ```bash
 cd backend
 python -m venv .venv
 .venv\Scripts\Activate.ps1            # Windows PowerShell
+# source .venv/bin/activate           # macOS / Linux
 pip install -r requirements.txt
 uvicorn app.api_app:app --reload --host 0.0.0.0 --port 8000
 ```
 
-**4 — Celery Worker** *(new terminal)*
+**5. Start the Celery worker** *(new terminal)*
 
 ```bash
 cd backend
@@ -604,7 +448,7 @@ cd backend
 celery -A app.infra.celery_app worker --loglevel=info --concurrency=1
 ```
 
-**5 — Frontend** *(new terminal)*
+**6. Start the frontend** *(new terminal)*
 
 ```bash
 cd frontend
@@ -612,103 +456,317 @@ npm install
 npm run dev
 ```
 
-**6 — Open** → **http://localhost:5173** → Register → Press `Ctrl+K`
+**7. Open** → **http://localhost:5173** → Register → Press `Ctrl+K` 🎉
 
-</td></tr></table>
+---
 
-### 🐳 Full Docker Stack (Alternative)
+### Option B — Full Docker Stack
 
 ```bash
 cd backend
 docker compose up -d        # Starts: MongoDB, Redis, API, Celery Worker
-cd ../frontend && npm run dev  # Frontend SPA (not Dockerized)
+cd ../frontend && npm run dev  # Frontend SPA
 ```
 
-<table align="center">
-<tr><th>Service</th><th>Container</th><th>Port</th><th>URL</th></tr>
-<tr><td><b>Backend API</b></td><td><code>genai-api</code></td><td>8000</td><td><a href="http://localhost:8000">http://localhost:8000</a></td></tr>
-<tr><td><b>API Docs</b></td><td>—</td><td>8000</td><td><a href="http://localhost:8000/docs">http://localhost:8000/docs</a></td></tr>
-<tr><td><b>Frontend</b></td><td>—</td><td>5173</td><td><a href="http://localhost:5173">http://localhost:5173</a></td></tr>
-<tr><td><b>MongoDB</b></td><td><code>genai-mongo</code></td><td>27017</td><td>—</td></tr>
-<tr><td><b>Redis</b></td><td><code>genai-redis</code></td><td>6379</td><td>—</td></tr>
-<tr><td><b>Ollama</b></td><td>—</td><td>11434</td><td><a href="http://localhost:11434">http://localhost:11434</a></td></tr>
-</table>
+<div align="center">
 
-<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%">
+| Service | Container | Port | URL |
+|---------|-----------|------|-----|
+| **Backend API** | `genai-api` | 8000 | [http://localhost:8000](http://localhost:8000) |
+| **API Docs** | — | 8000 | [http://localhost:8000/docs](http://localhost:8000/docs) |
+| **Frontend** | — | 5173 | [http://localhost:5173](http://localhost:5173) |
+| **MongoDB** | `genai-mongo` | 27017 | — |
+| **Redis** | `genai-redis` | 6379 | — |
+| **Ollama** | — | 11434 | [http://localhost:11434](http://localhost:11434) |
 
-## 🔑 Key Technical Decisions
+</div>
 
-<table align="center">
-<tr><th>Decision</th><th>Rationale</th></tr>
-<tr><td><b>Local LLM (Ollama)</b> over cloud APIs</td><td>Zero cost, no rate limits, no vendor lock-in, full control over model quantization (Q4_K_M). Supports CPU fallback with smaller models</td></tr>
-<tr><td><b>Hand-rolled JWT</b> (no PyJWT)</td><td>Uses stdlib <code>hmac</code>/<code>hashlib</code> for HMAC-SHA256. Zero external auth dependencies</td></tr>
-<tr><td><b>Circuit breaker on every external call</b></td><td>Prevents cascade failures — Ollama, web search, MongoDB all wrapped. CLOSED → OPEN → HALF_OPEN state machine</td></tr>
-<tr><td><b>L1 + L2 response cache</b></td><td>In-memory for speed, MongoDB for persistence + cross-process sharing. SHA-256 keyed on normalized goal text</td></tr>
-<tr><td><b>Celery for long-running tasks</b></td><td>Decouples LLM inference from API process. <code>acks_late</code> + <code>reject_on_worker_lost</code> for at-least-once delivery</td></tr>
-<tr><td><b>Multi-stage Docker</b></td><td>Build tools excluded from runtime image. Non-root <code>appuser</code> for security. HF cache dirs pre-created</td></tr>
-<tr><td><b>Guardrails as hard-blocks</b></td><td>Immediate <code>ValueError</code> raise — not warnings, not logs. Production-safe by default</td></tr>
-<tr><td><b>Error UX as a product feature</b></td><td>ErrorPanel categorizes by pattern (timeout → LLM Timeout, 401 → Auth Failed), suggests fixes, provides one-click retry</td></tr>
-</table>
+<p align="right"><a href="#top">⬆ Back to top</a></p>
 
-<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%">
+<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%" alt="divider"/>
+
+## 📂 Project Structure
+
+```
+genai-agent-sprint/
+├── 📁 backend/
+│   ├── 📁 app/
+│   │   ├── 📁 api/              # FastAPI routers (auth, platform, agent, stream, eval)
+│   │   ├── 📁 cache/            # L1 + L2 response cache
+│   │   ├── 📁 config/           # Runtime settings & environment config
+│   │   ├── 📁 core/             # Vector store & core primitives
+│   │   ├── 📁 infra/            # Celery, Ollama client, retry, timeout, validators
+│   │   ├── 📁 memory/           # Short-term, long-term memory + manager
+│   │   ├── 📁 observability/    # Health, readiness, Prometheus metrics
+│   │   ├── 📁 registry/         # Tool registry (self-registering)
+│   │   ├── 📁 reliability/      # Async circuit breaker
+│   │   ├── 📁 routing/          # Intelligent router with fallback strategies
+│   │   ├── 📁 security/         # Guardrails (5 gates) + policy engine
+│   │   ├── 📁 services/         # Agent, planning, LLM, eval, retriever services
+│   │   ├── 📁 tasks/            # Celery task definitions
+│   │   ├── 📁 tools/            # RAG search, web search, calculator
+│   │   └── api_app.py           # FastAPI application entry point
+│   ├── 📁 data/                 # RAG documents & vector store
+│   ├── 📁 eval/                 # Test cases for evaluation suites
+│   ├── 📁 scripts/              # Utility scripts (backup, build, evaluate)
+│   ├── 📁 tests/                # pytest suites (10 test files)
+│   ├── docker-compose.yml
+│   ├── Dockerfile
+│   └── requirements.txt         # 44 pinned Python packages
+├── 📁 frontend/
+│   ├── 📁 src/
+│   │   ├── 📁 app/              # Auth, errors, monitoring, providers, telemetry
+│   │   ├── 📁 features/         # Feature modules (agent API, hooks, types)
+│   │   ├── 📁 pages/            # 8 page components
+│   │   ├── 📁 shared/           # 14+ reusable UI components
+│   │   ├── 📁 mocks/            # MSW mock handlers
+│   │   ├── App.tsx
+│   │   └── main.tsx
+│   ├── 📁 e2e/                  # Playwright end-to-end tests
+│   ├── package.json
+│   └── vite.config.ts
+├── 📁 frontend-handoff/         # OpenAPI spec, Postman collection, acceptance tests
+├── 📁 assets/                   # Project documentation & guides
+├── 📁 .github/workflows/        # CI/CD pipelines (ci.yml, frontend-cd.yml)
+└── README.md
+```
+
+<p align="right"><a href="#top">⬆ Back to top</a></p>
+
+<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%" alt="divider"/>
+
+## 📡 API Reference
+
+<div align="center">
+
+### 🔐 Authentication
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| `POST` | `/api/auth/register` | Register a new user | ❌ |
+| `POST` | `/api/auth/login` | Login, receive JWT tokens | ❌ |
+| `POST` | `/api/auth/refresh` | Refresh access token | ❌ |
+| `GET` | `/api/auth/me` | Get current user profile | ✅ |
+
+### 🤖 Agents
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| `GET` | `/api/agents` | List all agents | ✅ |
+| `POST` | `/api/agents` | Create a new agent | ✅ |
+| `GET` | `/api/agents/{id}/versions` | List agent versions | ✅ |
+| `POST` | `/api/agents/{id}/versions` | Create new version | ✅ |
+| `POST` | `/api/agents/{id}/versions/{v}/promote` | Promote version | ✅ |
+
+### ▶️ Runs
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| `POST` | `/api/runs/submit` | Submit async agent run | ✅ |
+| `GET` | `/api/runs` | List runs (search/filter) | ✅ |
+| `GET` | `/api/runs/{id}/status` | Get run status | ✅ |
+| `GET` | `/api/runs/{id}/stream` | SSE stream for run events | ✅ |
+| `GET` | `/traces/{id}` | Get execution trace | ✅ |
+
+### 🧪 Evaluation
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| `GET` | `/api/eval/suites` | List evaluation suites | ✅ |
+| `POST` | `/api/eval/run-suite` | Run evaluation suite | ✅ |
+
+### 💚 Health
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| `GET` | `/health` | Basic health status | ❌ |
+| `GET` | `/ready` | Dependency health checks | ❌ |
+
+</div>
+
+<p align="right"><a href="#top">⬆ Back to top</a></p>
+
+<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%" alt="divider"/>
+
+## 🔐 Authentication
+
+- Protected routes expect `Authorization: Bearer <access_token>`
+- Auth responses include `user.role` with `admin | developer | viewer`
+- Development bypass available when `AUTH_DEV_BYPASS_ENABLED=true`
+- OTP echo available when `DEV_EMAIL_OTP_ECHO_ENABLED=true`
+- Hand-rolled JWT using stdlib `hmac` / `hashlib` — HMAC-SHA256, zero external dependencies
+- Full forgot-password flow: request OTP → verify → reset token → new password
+
+<p align="right"><a href="#top">⬆ Back to top</a></p>
+
+<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%" alt="divider"/>
+
+## 🧪 Testing
+
+### Backend — pytest
+
+```bash
+cd backend
+python -m pytest tests/ -v
+```
+
+| Test File | Coverage Area |
+|-----------|--------------|
+| `test_agent_run.py` | Full agent execution pipeline — plan creation, execution, synthesis |
+| `test_guardrails.py` | All 5 guardrail methods — injection, plan, output, memory, leakage |
+| `test_router.py` | Intelligent router — tool resolution, failure & confidence fallback |
+| `test_circuit_breaker.py` | State transitions: CLOSED → OPEN → HALF_OPEN → CLOSED |
+| `test_policy_engine.py` | Policy engine enforcement rules |
+| `test_retriever.py` | RAG retriever service |
+| `test_health.py` | Health and readiness endpoint responses |
+| `test_metrics.py` | Prometheus metrics emission |
+| `e2e_smoke_test.py` | End-to-end pipeline: API → planner → tools → synthesis |
+| `conftest.py` | Shared fixtures — mocked Ollama, MongoDB, agent instances |
+
+### Frontend — Vitest + React Testing Library
+
+```bash
+cd frontend
+npm run test
+```
+
+- Component unit tests with **Vitest** + **React Testing Library**
+- Accessibility tests via `axe-core` (`a11y.test.tsx`)
+- End-to-end tests via **Playwright** (`e2e/`)
+
+<p align="right"><a href="#top">⬆ Back to top</a></p>
+
+<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%" alt="divider"/>
+
+## 🚢 CI/CD
+
+### Backend CI (`ci.yml`)
+
+```mermaid
+graph LR
+    A[lint-test] --> B[docker-build]
+    A --> A1[Python 3.11 setup]
+    A --> A2[flake8 lint]
+    A --> A3[bandit security scan]
+    A --> A4[pytest suite]
+    B --> B1[docker compose build]
+    B --> B2[Trivy container scan<br/>HIGH/CRITICAL]
+```
+
+### Frontend CD (`frontend-cd.yml`)
+
+```mermaid
+graph LR
+    C[build-and-package] --> C1[CodeQL SAST init]
+    C --> C2[npm ci → tsc → ESLint → Vitest → Vite build]
+    C --> C3[npm audit — moderate+ blocking]
+    C --> C4[Upload build artifact]
+    C --> C5[CodeQL analysis]
+    C --> C6[Docker build → push to GHCR]
+```
+
+<p align="right"><a href="#top">⬆ Back to top</a></p>
+
+<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%" alt="divider"/>
 
 ## 📊 End-to-End Data Flow
 
-```
- 1.  User enters goal in Playground
- 2.  POST /api/runs/submit
- 3.  Create trace (status=queued) in MongoDB
- 4.  Enqueue Celery task → agent.execute_run.delay(run_id, session_id, goal)
- 5.  Worker picks up task
- 6.  ➜ Guardrails.validate_user_input(goal)
- 7.  ➜ ResponseCache.get(goal) → if hit, return cached answer immediately
- 8.  ➜ PlanningAgentService.create_plan(goal)
-          └─ LLM generates JSON plan: [{tool: "rag_search", query: "..."}, ...]
- 9.  ➜ Guardrails.validate_plan(steps)
-10.  ➜ For each step:
-          a. IntelligentRouter.execute(step)
-               └─ ReliableExecutor → CircuitBreaker → Tool
-               └─ If error → fallback to web_search
-               └─ If RAG similarity < 0.50 → fallback to web_search
-          b. Guardrails.sanitize_tool_output(result)
-          c. Store observation with timing metadata
-11.  ➜ PlanningAgentService.synthesize_answer(observations + memory)
-12.  ➜ Guardrails.validate_final_answer(answer)
-13.  ➜ ResponseCache.set(goal, plan, answer)
-14.  ➜ Update trace → status=completed, final_answer=answer
-15.  SSE stream events push to frontend in real-time
-16.  RunDetails page renders animated execution timeline
+```mermaid
+sequenceDiagram
+    participant U as 👤 User
+    participant F as 🖥️ Frontend
+    participant A as ⚡ API
+    participant C as 🔧 Celery Worker
+    participant G as 🛡️ Guardrails
+    participant P as 🧠 Planner
+    participant R as 🔄 Router
+    participant T as 🔨 Tools
+    participant M as 💾 MongoDB
+
+    U->>F: Enter goal in Playground
+    F->>A: POST /api/runs/submit
+    A->>M: Create trace (status=queued)
+    A->>C: Enqueue celery task
+    A-->>F: Return run_id
+    C->>G: validate_user_input(goal)
+    C->>P: create_plan(goal)
+    P-->>C: JSON plan [{tool, query}, ...]
+    C->>G: validate_plan(steps)
+    loop Each Step
+        C->>R: execute(step)
+        R->>T: Tool execution + Circuit Breaker
+        T-->>R: Result
+        R->>G: sanitize_tool_output(result)
+    end
+    C->>P: synthesize_answer(observations)
+    C->>G: validate_final_answer(answer)
+    C->>M: Update trace (status=completed)
+    F->>A: GET /api/runs/{id}/stream
+    A-->>F: SSE events (real-time)
+    F-->>U: Render execution timeline
 ```
 
-<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%">
+<p align="right"><a href="#top">⬆ Back to top</a></p>
+
+<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%" alt="divider"/>
+
+## 🗺️ Roadmap
+
+- [x] Plan → Execute → Synthesize agent pipeline
+- [x] 5-gate security guardrails (hard-blocks)
+- [x] JWT authentication with RBAC (admin/developer/viewer)
+- [x] Circuit breaker on all external calls
+- [x] L1 + L2 response caching
+- [x] Celery background task execution
+- [x] SSE real-time streaming
+- [x] Prometheus observability metrics
+- [x] Execution timeline visualization
+- [x] Smart error diagnostics (What/Why/Fix/Retry)
+- [x] Command palette (Ctrl+K)
+- [x] Evaluation lab with 3-score benchmarking
+- [x] CI/CD with Trivy + CodeQL + GHCR
+- [ ] Multi-model support (GPT-4, Claude, Gemini)
+- [ ] Agent marketplace & sharing
+- [ ] WebSocket upgrade for real-time traces
+- [ ] Kubernetes Helm chart deployment
+- [ ] OpenTelemetry distributed tracing integration
+- [ ] Plugin system for custom tools
+
+<p align="right"><a href="#top">⬆ Back to top</a></p>
+
+<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%" alt="divider"/>
 
 ## 🤝 Contributing
 
-Contributions welcome. Fork, branch, build, test, and submit:
+Contributions are welcome! Here's how to get started:
 
 ```bash
-# Fork the repo, create a feature branch
+# 1. Fork the repo, create a feature branch
 git checkout -b feature/your-feature
 
-# Backend: lint, scan, test
+# 2. Backend: lint, scan, test
 cd backend
 flake8 app --max-line-length=120
 bandit -r app -lll
 pytest tests/ -v
 
-# Frontend: type-check, lint, test
+# 3. Frontend: type-check, lint, test
 cd ../frontend
 npx tsc --noEmit
 npx vitest run
 
-# Commit with conventional format
+# 4. Commit with conventional format
 git commit -m "feat: add your feature description"
 git push origin feature/your-feature
 ```
 
-**Standards enforced:** PEP 8 + flake8 + bandit (backend), TypeScript strict mode + ESLint (frontend).
+**Standards enforced:**
+- **Backend** — PEP 8 + flake8 + bandit security scanning
+- **Frontend** — TypeScript strict mode + ESLint + Prettier
 
-<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%">
+<p align="right"><a href="#top">⬆ Back to top</a></p>
+
+<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%" alt="divider"/>
 
 ## 📄 License
 
@@ -718,12 +776,30 @@ git push origin feature/your-feature
 
 Distributed under the **MIT License**. See `LICENSE` for details.
 
+</div>
+
+<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%" alt="divider"/>
+
+## 👤 Author
+
+<div align="center">
+
+**Joylan Dsouza**
+
+[![GitHub](https://img.shields.io/badge/GitHub-Joylan9-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Joylan9)
+[![Email](https://img.shields.io/badge/Email-joylan928%40gmail.com-EA4335?style=for-the-badge&logo=gmail&logoColor=white)](mailto:joylan928@gmail.com)
+
 <br/>
-
-**⭐ Star this repository if TraceAI resonated with you.**
-
-*Built with FastAPI, React 19, TypeScript, Ollama, and an unreasonable amount of engineering discipline.*
 
 > *"I don't just build features — I build systems that operators trust at 2 AM."*
 
+<br/>
+
+⭐ **Star this repository if TraceAI resonated with you.**
+
+*Built with FastAPI, React 19, TypeScript, Ollama, and an unreasonable amount of engineering discipline.*
+
 </div>
+
+<!-- FOOTER WAVE -->
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:0d1117,50:161b22,100:1f6feb&height=120&section=footer" width="100%" alt="Footer"/>
