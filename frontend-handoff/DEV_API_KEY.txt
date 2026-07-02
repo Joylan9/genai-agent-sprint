@@ -1,3 +1,0 @@
-DEMO_DEV_KEY_2026_HARDENED
-Scope: Full Access (Dev Environment)
-Expiry: Never (Rotate before prod)

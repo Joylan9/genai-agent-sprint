@@ -1,15 +1,33 @@
+# Dependencies & Virtual Environments
 .venv/
+node_modules/
 __pycache__/
-pytest-cache-files-*/
-.env
 *.pyc
 *.pyo
 *.pyd
+
+# Environment & Secrets
+.env
+*.env
+
+# Build Output
+dist/
 *.sqlite3
+
+# Test & Cache
+pytest-cache-files-*/
+.pytest_cache/
+
+# Logs
 *.log
+
+# Data (generated)
 data/vector_store.pkl
 
+# OS & Editor
 NUL
+.DS_Store
+Thumbs.db
 
 # Accidentally created files
 --name
@@ -17,4 +35,3 @@ NUL
 -p
 nano.env
 genai-agent*latest
-*.env
