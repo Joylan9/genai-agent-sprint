@@ -23,6 +23,7 @@ pytest-cache-files-*/
 
 # Data (generated)
 data/vector_store.pkl
+backend/data/vector_store.pkl
 
 # OS & Editor
 NUL

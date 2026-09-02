@@ -302,6 +302,7 @@ import { cn } from '../shared/lib/utils';
 import { StatusBanner } from '../shared/ui/StatusBanner';
 
 const createSessionId = () => `session_${Math.random().toString(36).slice(2, 7)}`;
+export const QUEUED_STUCK_TIMEOUT_MS = 15000;
 
 type OutputMessage = { text: string; role: 'user' | 'agent' };
 type RunEvent = { type: string; data: Record<string, any>; at: string };
@@ -317,10 +318,12 @@ export const PlaygroundPage = () => {
     const [runStatus, setRunStatus] = useState<'idle' | 'queued' | 'running' | 'completed' | 'failed'>('idle');
     const [isCopied, setIsCopied] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [queuedWaitExceeded, setQueuedWaitExceeded] = useState(false);
 
     const scrollRef = useRef<HTMLDivElement>(null);
     const streamRef = useRef<EventSource | null>(null);
     const pollRef = useRef<number | null>(null);
+    const queuedTimeoutRef = useRef<number | null>(null);
     const { data: health, isError: isHealthError } = useHealth();
     const { data: agents = [] } = useAgents();
 
@@ -359,6 +362,9 @@ export const PlaygroundPage = () => {
         if (pollRef.current) {
             window.clearInterval(pollRef.current);
         }
+        if (queuedTimeoutRef.current) {
+            window.clearTimeout(queuedTimeoutRef.current);
+        }
     }, []);
 
     const appendEvent = (type: string, data: Record<string, any> = {}) => {
@@ -372,6 +378,24 @@ export const PlaygroundPage = () => {
         }
     };
 
+    const clearQueuedTimeout = () => {
+        if (queuedTimeoutRef.current) {
+            window.clearTimeout(queuedTimeoutRef.current);
+            queuedTimeoutRef.current = null;
+        }
+    };
+
+    const beginQueuedTimeout = () => {
+        clearQueuedTimeout();
+        queuedTimeoutRef.current = window.setTimeout(() => {
+            setQueuedWaitExceeded(true);
+            appendEvent('worker_wait_timeout', {
+                status: 'queued',
+                message: 'Run is queued because no worker is available.',
+            });
+        }, QUEUED_STUCK_TIMEOUT_MS);
+    };
+
     const beginPolling = (runId: string) => {
         stopPolling();
         pollRef.current = window.setInterval(async () => {
@@ -380,11 +404,19 @@ export const PlaygroundPage = () => {
                 setRunStatus((status.status as typeof runStatus) || 'running');
                 if (status.status === 'completed') {
                     stopPolling();
+                    clearQueuedTimeout();
+                    setQueuedWaitExceeded(false);
                     setOutput((prev) => [...prev, { text: status.result || '', role: 'agent' }]);
                 }
                 if (status.status === 'failed') {
                     stopPolling();
+                    clearQueuedTimeout();
+                    setQueuedWaitExceeded(false);
                     setOutput((prev) => [...prev, { text: `__ERROR__|${status.error || 'Run failed'}|Check the run details trace for the full failure context.`, role: 'agent' }]);
+                }
+                if (status.status === 'running') {
+                    clearQueuedTimeout();
+                    setQueuedWaitExceeded(false);
                 }
             } catch {
                 stopPolling();
@@ -401,6 +433,10 @@ export const PlaygroundPage = () => {
             const payload = JSON.parse(event.data);
             setRunStatus(payload.status || 'running');
             appendEvent('status_change', payload);
+            if (payload.status !== 'queued') {
+                clearQueuedTimeout();
+                setQueuedWaitExceeded(false);
+            }
             if (payload.status === 'completed' || payload.status === 'failed') {
                 source.close();
                 stopPolling();
@@ -419,12 +455,16 @@ export const PlaygroundPage = () => {
             const payload = JSON.parse((event as MessageEvent<string>).data);
             appendEvent('result', payload);
             if (payload.result) {
+                clearQueuedTimeout();
+                setQueuedWaitExceeded(false);
                 setOutput((prev) => [...prev, { text: payload.result, role: 'agent' }]);
             }
         });
         source.addEventListener('error', (event) => {
             const payload = JSON.parse((event as MessageEvent<string>).data);
             appendEvent('error', payload);
+            clearQueuedTimeout();
+            setQueuedWaitExceeded(false);
             setOutput((prev) => [...prev, { text: `__ERROR__|${payload.error || 'Run failed'}|Check the run details trace for the full failure context.`, role: 'agent' }]);
         });
         source.onerror = () => {
@@ -439,6 +479,8 @@ export const PlaygroundPage = () => {
         setIsSubmitting(true);
         setRunStatus('queued');
         setEventLog([]);
+        setQueuedWaitExceeded(false);
+        beginQueuedTimeout();
         trackEvent('agent_run_started', { goal, agentId: selectedAgentId || undefined });
 
         const currentGoal = goal;
@@ -456,6 +498,7 @@ export const PlaygroundPage = () => {
             appendEvent('status_change', { status: submitted.status, run_id: submitted.run_id });
             beginStream(submitted.run_id);
         } catch (error: any) {
+            clearQueuedTimeout();
             const message = error?.message || 'Unknown API error';
             const suggestion = message.toLowerCase().includes('unauthorized')
                 ? 'Sign in again or enable the explicit dev bypass if you are in local development.'
@@ -486,6 +529,13 @@ export const PlaygroundPage = () => {
                 <StatusBanner
                     type="error"
                     message="System dependencies are degraded. Runs may queue but completion can still fail until readiness recovers."
+                />
+            )}
+            {queuedWaitExceeded && (
+                <StatusBanner
+                    type="warning"
+                    message="Run is queued because no worker is available. Start the Celery worker, then submit the question again."
+                    onClose={() => setQueuedWaitExceeded(false)}
                 />
             )}
             <div className="flex items-center justify-between">

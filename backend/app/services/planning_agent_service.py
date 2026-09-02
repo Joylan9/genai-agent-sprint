@@ -540,7 +540,11 @@ Rules:
         messages = [
             {
                 "role": "system",
-                "content": "Use ONLY provided observations and memory. Do not invent.",
+                "content": (
+                    "Use observations and memory first. If they are missing, empty, or failed, "
+                    "answer straightforward knowledge questions from your general knowledge. "
+                    "Do not fabricate tool results, citations, private data, or current facts."
+                ),
             },
             {
                 "role": "user",
@@ -597,6 +601,15 @@ from app.security.guardrails import Guardrails
 from app.security.policy_engine import PolicyEngine
 
 
+def _is_tool_failure_refusal(answer: str) -> bool:
+    normalized = answer.lower()
+    return (
+        "web search failed" in normalized
+        or ("tool" in normalized and "failed" in normalized and "will not invent" in normalized)
+        or ("do not have any information" in normalized and "will not invent" in normalized)
+    )
+
+
 class PlanningAgentService:
     def __init__(
         self,
@@ -640,9 +653,11 @@ class PlanningAgentService:
 
     async def _persist_trace(self, request_id: str, trace_doc: dict[str, Any]) -> None:
         db = MongoDB.get_database()
+        set_doc = dict(trace_doc)
+        set_doc.pop("request_id", None)
         await db.traces.update_one(
             {"request_id": request_id},
-            {"$set": trace_doc, "$setOnInsert": {"request_id": request_id}},
+            {"$set": set_doc, "$setOnInsert": {"request_id": request_id}},
             upsert=True,
         )
 
@@ -1051,10 +1066,18 @@ Rules:
     ) -> str:
         observation_text = ""
         for observation in observations:
+            response = observation.get("response", {})
+            response_status = response.get("status", "unknown") if isinstance(response, dict) else "unknown"
+            metadata = response.get("metadata", {}) if isinstance(response, dict) else {}
+            response_data = response.get("data", "") if isinstance(response, dict) else str(response)
+            error_text = metadata.get("error") if isinstance(metadata, dict) else None
             observation_text += (
                 f"\nStep {observation['step']} ({observation['tool']} - {observation['query']}):\n"
-                f"{observation['response'].get('data', '')}\n"
+                f"Status: {response_status}\n"
+                f"Data: {response_data}\n"
             )
+            if error_text:
+                observation_text += f"Error: {error_text}\n"
 
         memory_text = ""
         if memory_context:
@@ -1070,7 +1093,18 @@ Rules:
                     memory_text += f"{memory.get('text')}\n"
 
         messages = [
-            {"role": "system", "content": "Use ONLY provided observations and memory. Do not invent."},
+            {
+                "role": "system",
+                "content": (
+                    f"Current server date: {datetime.now(timezone.utc).date().isoformat()} UTC. "
+                    "Use observations and memory first. If they are missing, empty, or failed, "
+                    "answer straightforward knowledge questions from your general knowledge. "
+                    "For date questions, use the current server date. "
+                    "For current news, use successful web observations only; if web search failed, say current headlines are unavailable. "
+                    "Do not mention internal tool failures unless the user asks for diagnostics. "
+                    "Do not fabricate tool results, citations, private data, or current facts."
+                ),
+            },
             {
                 "role": "user",
                 "content": f"""
@@ -1095,4 +1129,23 @@ Observations:
         final_answer = response["message"]["content"]
         if isinstance(final_answer, dict):
             final_answer = final_answer.get("answer") if isinstance(final_answer.get("answer"), str) else json.dumps(final_answer)
+        if isinstance(final_answer, str) and _is_tool_failure_refusal(final_answer):
+            fallback_response = await llm_chat(
+                self.client,
+                model=self.model_name,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Answer the user's straightforward knowledge question from general knowledge. "
+                            "Do not mention failed tools. Do not invent citations, private data, or current facts."
+                        ),
+                    },
+                    {"role": "user", "content": goal},
+                ],
+                options={"num_ctx": 2048},
+            )
+            final_answer = fallback_response["message"]["content"]
+            if isinstance(final_answer, dict):
+                final_answer = final_answer.get("answer") if isinstance(final_answer.get("answer"), str) else json.dumps(final_answer)
         return self.policy.redact(final_answer)

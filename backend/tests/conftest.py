@@ -262,9 +262,9 @@ def eval_run_mock():
 def client(monkeypatch, fake_db, mock_agent, task_delay_mock, eval_run_mock):
     from app.memory.database import MongoDB
     from app.services.eval_runner import EvalRunner
-    import api.dependencies
     import app.api.agent as agent_module
     import app.observability.readiness as readiness_module
+    import app.services.agent_factory as agent_factory
     import app.tasks.agent_tasks as task_module
     from app.api_app import app as fastapi_app
 
@@ -272,7 +272,7 @@ def client(monkeypatch, fake_db, mock_agent, task_delay_mock, eval_run_mock):
     monkeypatch.setattr(MongoDB, "get_database", lambda: fake_db)
     monkeypatch.setattr(MongoDB, "initialize_indexes", AsyncMock())
 
-    monkeypatch.setattr(api.dependencies, "build_agent", lambda: mock_agent)
+    monkeypatch.setattr(agent_factory, "build_agent", lambda: mock_agent)
     monkeypatch.setattr(agent_module, "build_agent", lambda: mock_agent)
     agent_module._agent = None
 
@@ -283,6 +283,7 @@ def client(monkeypatch, fake_db, mock_agent, task_delay_mock, eval_run_mock):
     ready_redis = SimpleNamespace(ping=lambda: True)
     monkeypatch.setattr(readiness_module, "get_ollama_client", lambda: ready_ollama)
     monkeypatch.setattr(readiness_module.redis, "from_url", lambda *args, **kwargs: ready_redis)
+    monkeypatch.setattr(readiness_module, "_ping_celery_workers", lambda: [{"celery@test": {"ok": "pong"}}])
 
     with TestClient(fastapi_app) as test_client:
         yield test_client

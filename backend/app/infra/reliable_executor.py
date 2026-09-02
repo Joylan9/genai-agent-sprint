@@ -34,7 +34,7 @@ class ReliableExecutor:
 
             TOOL_EXECUTION_COUNTER.labels(
                 tool_name=tool_name,
-                status="success"
+                status=result.get("status", "success")
             ).inc()
 
             TOOL_EXECUTION_LATENCY.labels(
@@ -43,7 +43,7 @@ class ReliableExecutor:
 
             result.setdefault("metadata", {})
             result["metadata"]["total_execution_time"] = latency
-            result["metadata"]["status"] = "success"
+            result["metadata"]["status"] = result.get("status", "success")
 
             return result
 

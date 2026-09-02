@@ -74,7 +74,7 @@ async def _execute_agent_async(run_id: str, session_id: str, goal: str, agent_id
         await _emit_event(db, run_id, "status_change", {"status": "running"})
 
         # ---- Build the agent (same factory as API) ----
-        from api.dependencies import build_agent
+        from app.services.agent_factory import build_agent
         agent = build_agent()
 
         async def event_callback(event_type: str, data: dict | None = None):

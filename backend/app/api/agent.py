@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException, Depends
 from api.schemas import AgentRequest, AgentResponse
-from api.dependencies import build_agent
 from app.infra.validators import InputValidator
 from app.api.auth import require_role
+from app.services.agent_factory import build_agent
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 

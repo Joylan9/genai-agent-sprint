@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 import redis
 
 from app.config.runtime import feature_flags_payload, web_search_available
+from app.infra.celery_app import celery_app
 from app.infra.ollama_client import get_ollama_client
 from ..memory.database import MongoDB
 
@@ -19,6 +20,13 @@ def _check_payload(status: str, optional: bool, detail: str | None = None) -> di
     if detail:
         payload["detail"] = detail
     return payload
+
+
+def _ping_celery_workers(timeout: float = 1.0) -> list[dict[str, object]]:
+    replies = celery_app.control.inspect(timeout=timeout).ping()
+    if not replies:
+        return []
+    return [{name: payload} for name, payload in replies.items()]
 
 
 @router.get("/ready")
@@ -43,11 +51,24 @@ async def ready():
         client = redis.from_url(redis_url, socket_connect_timeout=3)
         client.ping()
         checks["redis"] = _check_payload("ready", optional=False)
-        checks["celery"] = _check_payload("ready", optional=False)
     except Exception as exc:
         detail = str(exc)
         checks["redis"] = _check_payload("unavailable", optional=False, detail=detail)
         checks["celery"] = _check_payload("unavailable", optional=False, detail=detail)
+    else:
+        try:
+            worker_replies = _ping_celery_workers()
+            if worker_replies:
+                checks["celery"] = _check_payload("ready", optional=False)
+                checks["celery"]["workers"] = len(worker_replies)
+            else:
+                checks["celery"] = _check_payload(
+                    "unavailable",
+                    optional=False,
+                    detail="Redis is reachable, but no Celery workers replied.",
+                )
+        except Exception as exc:
+            checks["celery"] = _check_payload("unavailable", optional=False, detail=str(exc))
 
     checks["web_search"] = _check_payload(
         "ready" if web_search_available() else "disabled",

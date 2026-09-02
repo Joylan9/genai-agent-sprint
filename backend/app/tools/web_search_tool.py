@@ -35,7 +35,11 @@ class WebSearchTool(BaseTool):
 
     async def search(self, query: str, num_results: int = 3):
         if not self.is_available:
-            return "Web search is unavailable because SERPAPI_KEY is not configured."
+            return {
+                "status": "error",
+                "data": None,
+                "metadata": {"error": "Web search is unavailable because SERPAPI_KEY is not configured."},
+            }
 
         params = {
             "q": query,
@@ -53,12 +57,24 @@ class WebSearchTool(BaseTool):
         try:
             response = await self._circuit.call(_do_search)
         except asyncio.TimeoutError:
-            return "Search API error: request timed out"
+            return {
+                "status": "error",
+                "data": None,
+                "metadata": {"error": "Search API error: request timed out"},
+            }
         except Exception as e:
-            return f"Search API error: {str(e)}"
+            return {
+                "status": "error",
+                "data": None,
+                "metadata": {"error": f"Search API error: {str(e)}"},
+            }
 
         if response.status_code != 200:
-            return f"Search API error: {response.status_code}"
+            return {
+                "status": "error",
+                "data": None,
+                "metadata": {"error": f"Search API error: {response.status_code}"},
+            }
 
         data = response.json()
 
@@ -71,9 +87,17 @@ class WebSearchTool(BaseTool):
             results.append(f"{title}\n{snippet}\nSource: {link}")
 
         if not results:
-            return "No relevant web results found."
+            return {
+                "status": "error",
+                "data": None,
+                "metadata": {"error": "No relevant web results found."},
+            }
 
-        return "\n\n".join(results)
+        return {
+            "status": "success",
+            "data": "\n\n".join(results),
+            "metadata": {"result_count": len(results)},
+        }
 
     async def execute(self, step: Dict[str, Any]) -> Dict[str, Any]:
 
@@ -91,14 +115,9 @@ class WebSearchTool(BaseTool):
         try:
             # search is now async
             result = await self.search(query)
-
-            return {
-                "status": "success",
-                "data": result,
-                "metadata": {
-                    "circuit_status": self._circuit.state
-                }
-            }
+            result.setdefault("metadata", {})
+            result["metadata"]["circuit_status"] = self._circuit.state
+            return result
 
         except Exception as e:
             return {

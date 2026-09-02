@@ -168,4 +168,20 @@ def test_ready_reports_dependency_checks(client):
     assert payload["checks"]["mongodb"]["status"] == "ready"
     assert payload["checks"]["redis"]["status"] == "ready"
     assert payload["checks"]["celery"]["status"] == "ready"
+    assert payload["checks"]["celery"]["workers"] == 1
     assert payload["checks"]["web_search"]["optional"] is True
+
+
+def test_ready_reports_celery_unavailable_when_no_worker_replies(client, monkeypatch):
+    import app.observability.readiness as readiness_module
+
+    monkeypatch.setattr(readiness_module, "_ping_celery_workers", lambda: [])
+
+    response = client.get("/ready")
+
+    assert response.status_code == 503
+    payload = response.json()
+    assert payload["status"] == "degraded"
+    assert payload["checks"]["redis"]["status"] == "ready"
+    assert payload["checks"]["celery"]["status"] == "unavailable"
+    assert "no Celery workers replied" in payload["checks"]["celery"]["detail"]

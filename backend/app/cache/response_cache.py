@@ -12,6 +12,8 @@ from typing import Optional
 
 from pymongo import ASCENDING
 
+CACHE_NAMESPACE = "response-cache-v2"
+
 
 class ResponseCache:
     def __init__(self, db, ttl_seconds: int = 3600):
@@ -47,11 +49,12 @@ class ResponseCache:
 
     def _goal_key(self, goal: str) -> str:
         normalized_goal = self._normalize(goal)
-        return hashlib.sha256(normalized_goal.encode("utf-8")).hexdigest()
+        combined = f"{CACHE_NAMESPACE}:goal:{normalized_goal}"
+        return hashlib.sha256(combined.encode("utf-8")).hexdigest()
 
     def _plan_key(self, goal: str, plan_text: str) -> str:
         normalized_goal = self._normalize(goal)
-        combined = normalized_goal + plan_text
+        combined = f"{CACHE_NAMESPACE}:plan:{normalized_goal}:{plan_text}"
         return hashlib.sha256(combined.encode("utf-8")).hexdigest()
 
     # ============================================================

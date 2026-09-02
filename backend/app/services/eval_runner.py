@@ -87,7 +87,7 @@ class EvalRunner:
         start = time.time()
         try:
             # Build agent and execute
-            from api.dependencies import build_agent
+            from app.services.agent_factory import build_agent
             agent = build_agent()
 
             result = await agent.run_goal(f"eval-{case_id}", goal)
